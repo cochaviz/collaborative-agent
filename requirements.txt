@@ -1,4 +1,4 @@
-matrx          == 2.1.2
+matrx          >= 2.1.2
 
 # all requirements below are 
 # additional libraries provided to do this assignment. 
@@ -10,10 +10,10 @@ chardet        == 4.0.0
 colour         == 0.1.5
 docutils       == 0.16
 gevent         == 21.1.2
-greenlet       == 1.0.0
+greenlet       >= 1.0.0
 jsonpickle     == 1.5.1
 markupsafe     == 2.0.1
-numpy          == 1.20.0
+numpy          >= 1.20.0
 Werkzeug       == 1.0.1
 
 
