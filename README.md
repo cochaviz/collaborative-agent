@@ -29,9 +29,35 @@ Download or clone this repository and the required dependencies listed in the 'r
 The required dependencies can be installed through 'pip install -r requirements.txt'. 
 
 ## Quickstart
-- Read through the code to familiarise yourself with its workings. The baseline agent is very limited but provides useful insights.
+- Read through the code to familiarize yourself with its workings. The baseline agent is very limited but provides useful insights.
 - Explore the world/environment, task, and agents through 'main.py'. It is also possible to control the human agent.
 - Complete the task using the human agent and check the outputted logs. 
 
+### Beyond Moving around
+A couple of things:
+
+1. Automatic navigation should be done through the `self._state_tracker`,
+   gathering information about the world from the `State` object passed in
+   through `BW4TBaselineAgent.decide_on_bw4t_action`. (pro-tip: make the state an attribute, e.g.
+   `self._state`)
+
+2. An action should be a `tuple[str, dict]`, where the `str` constitutes the 
+   action, and the `dict` the object id onto which the action is performed. In 
+   the case that no action is performed on anything, the dict is empty:
+```python
+# becuase a move doesn't perform on anything
+return MoveNorth.__name__, {} 
+```
+```python
+# we open the door, so we store its 'obj_id' in the dict
+return OpenDoorAction.__name__, {'object_id':self._door['obj_id']}
+```
+3. Actions are only performed _after_ another action is submitted. This means
+   that if the agent were to be told 'please move up', you will only see this
+   reflected in the interface after it has been told to 'pick up the box'.
+   
+4. TODO: How to look for and pick up objects
+
 ## More information
-[More documentation can be found here](https://tracinsy.ewi.tudelft.nl/pubtrac/BW4T-Matrx-CollaborativeAI/wiki). 
+[More documentation can be found 
+here](https://tracinsy.ewi.tudelft.nl/pubtrac/BW4T-Matrx-CollaborativeAI/wiki). 
