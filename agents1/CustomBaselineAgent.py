@@ -177,6 +177,7 @@ class CustomBaselineAgent(BW4TBrain):
             self._phase = Phase.GET_ITEM
 
     def _getItemPhase(self) -> Action | None:
+        # TODO Check if inventory full
         self._phase = Phase.FOLLOW_PATH_TO_CLOSE_ITEMS
         item: dict = self._collectables.pop()
         return GrabObject.__name__, {'object_id':item['obj_id']}
