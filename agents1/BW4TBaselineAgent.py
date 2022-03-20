@@ -108,4 +108,5 @@ class BaseLineAgent(BW4TBrain):
                 if 'Found' in message and 'colour' not in message:
                     trustBeliefs[member]-=0.1
                     break
+        print(trustBeliefs)
         return trustBeliefs

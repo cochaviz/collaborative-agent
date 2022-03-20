@@ -1,6 +1,7 @@
 from typing import Callable, Dict
 import enum, random
-
+import matplotlib.pyplot as plt
+import time
 from matrx.actions.move_actions import MoveNorth
 
 from bw4t.BW4TBlocks import GhostBlock
@@ -76,15 +77,20 @@ class CustomBaselineAgent(BW4TBrain):
 
         # Process messages from team members
         receivedMessages = self._processMessages(self._teamMembers)
-
+        agent1List = []
         # Update trust beliefs for team members
-        self._trustBlief(self._teamMembers, receivedMessages)
+        self._trustBelief(self._teamMembers, receivedMessages, agent1List)
         
         while True:
             actionAndSubject = self._switchPhase[self._phase]()
 
             if actionAndSubject is not None and actionAndSubject[0] is not None:
                 return actionAndSubject
+
+        # You can change the default value to your preference
+        plt.plot(agents1List)
+        plt.ylabel('some numbers')
+        plt.show()
 
     # ==== PHASE ====
 
@@ -174,20 +180,37 @@ class CustomBaselineAgent(BW4TBrain):
 
     # ==== TRUST ====
 
-    def _trustBlief(self, member, received) -> dict:
+    def _trustBelief(self, member, received, agent1List) -> dict:
         '''
         Baseline implementation of a trust belief. Creates a dictionary with trust belief scores for each team member, for example based on the received messages.
         '''
         # You can change the default value to your preference
+
+
         default = 0.5
         trustBeliefs = {}
+
         for member in received.keys():
             trustBeliefs[member] = default
         for member in received.keys():
+            print(member)
             for message in received[member]:
                 if 'Found' in message and 'colour' not in message:
                     trustBeliefs[member]-=0.1
+                    if (member == "agent1"):
+                        agent1List.append(trustBeliefs[member])
                     break
+                else:
+                    if (member == "agent1"):
+                        agent1List.append(trustBeliefs[member])
+
+        print("agent1list")
+        print(agent1List)
+        #print(trustBeliefs)
+        # You can change the default value to your preference
+        plt.plot([1, 2, 3, 4])
+        plt.ylabel('some numbers')
+        plt.show()
         return trustBeliefs
 
     # ==== UTILS ====
