@@ -2,6 +2,7 @@ from typing import Callable, Dict
 import enum, random
 
 from matrx.actions.move_actions import MoveNorth
+from matrx.actions.object_actions import GrabObject
 
 from bw4t.BW4TBrain import BW4TBrain
 from matrx.agents.agent_utils.state import State
@@ -10,7 +11,7 @@ from matrx.agents.agent_utils.state_tracker import StateTracker
 from matrx.actions.door_actions import OpenDoorAction
 from matrx.messages.message import Message
 
-Action = tuple[str, dict]
+Action = tuple[str, dict]|None
 
 class Phase(enum.Enum):
     PLAN_PATH_TO_CLOSED_DOOR=1,
@@ -34,6 +35,7 @@ class CustomBaselineAgent(BW4TBrain):
         self._phase: Phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
         self._teamMembers = []
 
+        self._collectables: list[dict] = []
         self._agent_name: None|str = None
         self._current_state: State
         self._repeat_action: int = 0
@@ -132,20 +134,58 @@ class CustomBaselineAgent(BW4TBrain):
         return MoveNorth.__name__, {}
 
     def _planPathToCloseItemsPhase(self) -> Action|None:
-        pass
+        objects: list[dict]|None = self._current_state.get_room_objects(self._door['room_name'])
+
+        if objects is None:
+            # TODO Use correct format
+            self._report_to_console("Can't find any objects in " + self._door['room_name'])
+            self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
+            return
+
+        collectables: list[dict] = list(filter(lambda e: 'CollectableBlock' in e['class_inheritance'], objects))
+
+        for collectable in collectables:
+            if collectable not in self._collectables:
+                self._collectables.append(collectable)
+
+        if len(self._collectables) == 0:
+            self._report_to_console("Can't find any collectable objects in room", self._door['room_name'])
+            self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
+            return
+
+        printable_collectables = list(map(lambda e: self._object_as_shape(e), collectables))
+        self._report_to_console("Found collectable objects:", printable_collectables)
+        self._report_to_console("Getting the following object:", printable_collectables[0])
+
+        self._navigator.reset_full()
+        self._report_to_console("Going to object location:", self._collectables[0]['location'])
+        self._navigator.add_waypoints([self._collectables[0]['location']])
+        self._phase = Phase.FOLLOW_PATH_TO_CLOSE_ITEMS
 
     def _followPathToCloseItemsPhase(self) -> Action|None:
-        pass
+        self._state_tracker.update(self._current_state)
 
-    def _getItemPhase(self) -> Action|None:
-        pass
+        action = self._navigator.get_move_action(self._state_tracker)
+
+        if action is not None:
+            return action, {}
+
+        if len(self._collectables) == 0:
+            self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
+        else:
+            self._report_to_console("Grabbing item from:", len(self._collectables))
+            self._phase = Phase.GET_ITEM
+
+    def _getItemPhase(self) -> Action | None:
+        self._phase = Phase.FOLLOW_PATH_TO_CLOSE_ITEMS
+        item: dict = self._collectables.pop()
+        return GrabObject.__name__, {'object_id':item['obj_id']}
 
     def _planPathToGoalPhase(self) -> Action|None:
         pass
 
     def _followPathToGoalPhase(self) -> Action|None:
         pass
-
 
     # ==== MESSAGES ====
 
@@ -201,5 +241,11 @@ class CustomBaselineAgent(BW4TBrain):
         if self._repeat_action == 0:
             self._phase = nextPhase
 
-    def _report_to_console(self, *args):
+    def _report_to_console(self, *args) -> None:
         print(self._agent_name, "reporting:", *args)
+
+    def _object_as_shape(self, obj) -> str:
+        if 'CollectableBlock' in obj['class_inheritance'] or 'GhostBlock' in obj['class_inheritance']:
+            return obj['visualization']['colour'] + " " + str(obj['visualization']['shape'])
+        else:
+            return 'not a shape'
