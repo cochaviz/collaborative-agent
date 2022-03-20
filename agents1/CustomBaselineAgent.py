@@ -3,13 +3,14 @@ import enum, random
 
 from matrx.actions.move_actions import MoveNorth
 
-from bw4t.BW4TBlocks import GhostBlock
 from bw4t.BW4TBrain import BW4TBrain
 from matrx.agents.agent_utils.state import State
 from matrx.agents.agent_utils.navigator import Navigator
 from matrx.agents.agent_utils.state_tracker import StateTracker
 from matrx.actions.door_actions import OpenDoorAction
 from matrx.messages.message import Message
+
+Action = tuple[str, dict]
 
 class Phase(enum.Enum):
     PLAN_PATH_TO_CLOSED_DOOR=1,
@@ -34,12 +35,10 @@ class CustomBaselineAgent(BW4TBrain):
         self._teamMembers = []
 
         self._agent_name: None|str = None
-        self._goal_objects: list[GhostBlock] = []
-
         self._current_state: State
         self._repeat_action: int = 0
 
-        self._switchPhase: dict[Phase, Callable[[], tuple|None]] = {
+        self._switchPhase: dict[Phase, Callable[[], Action|None]] = {
             Phase.PLAN_PATH_TO_CLOSED_DOOR: self._planPathToClosedDoorPhase,
             Phase.FOLLOW_PATH_TO_CLOSED_DOOR: self._followPathToClosedDoorPhase,
             Phase.OPEN_DOOR: self._openDoorPhase,
@@ -59,7 +58,7 @@ class CustomBaselineAgent(BW4TBrain):
         self._navigator = Navigator(agent_id=self.agent_id, 
             action_set=self.action_set, algorithm=Navigator.A_STAR_ALGORITHM)
 
-    def filter_observations(self, state) -> State:
+    def filter_observations(self, state: State) -> State:
         return state
 
     def decide_on_bw4t_action(self, state:State) -> tuple[str, dict]:
@@ -87,14 +86,14 @@ class CustomBaselineAgent(BW4TBrain):
 
     # ==== PHASE ====
 
-    def _planPathToClosedDoorPhase(self) -> tuple|None:
+    def _planPathToClosedDoorPhase(self) -> Action|None:
         self._navigator.reset_full()
 
         closedDoors = [door for door in self._current_state.values()
             if 'class_inheritance' in door and 'Door' in door['class_inheritance'] and not door['is_open']]
 
         if len(closedDoors)==0:
-            return None, {}
+            return None
 
         # Randomly pick a closed door
         self._door = random.choice(closedDoors)
@@ -109,42 +108,42 @@ class CustomBaselineAgent(BW4TBrain):
 
         self._phase=Phase.FOLLOW_PATH_TO_CLOSED_DOOR
 
-    def _followPathToClosedDoorPhase(self) -> tuple|None:
+    def _followPathToClosedDoorPhase(self) -> Action|None:
         self._state_tracker.update(self._current_state)
 
         # Follow path to door
         action = self._navigator.get_move_action(self._state_tracker)
 
-        if action!=None:
+        if action is not None:
             return action, {}
 
         self._phase=Phase.OPEN_DOOR
 
-    def _openDoorPhase(self) -> tuple|None:
+    def _openDoorPhase(self) -> Action|None:
         self._phase=Phase.ENTER_ROOM
 
         # Open door
         return OpenDoorAction.__name__, {'object_id':self._door['obj_id']}
 
-    def _enterRoomPhase(self) -> tuple|None:
+    def _enterRoomPhase(self) -> Action|None:
         self._sendMessage("Trying to enter room")
         self._repeat_then(1, Phase.PLAN_PATH_TO_CLOSE_ITEMS)
 
         return MoveNorth.__name__, {}
 
-    def _planPathToCloseItemsPhase(self) -> tuple|None:
-        self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
-
-    def _followPathToCloseItemsPhase(self) -> tuple|None:
+    def _planPathToCloseItemsPhase(self) -> Action|None:
         pass
 
-    def _getItemPhase(self) -> tuple|None:
+    def _followPathToCloseItemsPhase(self) -> Action|None:
         pass
 
-    def _planPathToGoalPhase(self) -> tuple|None:
+    def _getItemPhase(self) -> Action|None:
         pass
 
-    def _followPathToGoalPhase(self) -> tuple|None:
+    def _planPathToGoalPhase(self) -> Action|None:
+        pass
+
+    def _followPathToGoalPhase(self) -> Action|None:
         pass
 
 
@@ -190,7 +189,7 @@ class CustomBaselineAgent(BW4TBrain):
         return trustBeliefs
 
     # ==== UTILS ====
-    #
+
     def _repeat_then(self, repeats: int, nextPhase: Phase) -> None:
         if self._repeat_action == 0:
             self._repeat_action = repeats
@@ -202,5 +201,5 @@ class CustomBaselineAgent(BW4TBrain):
         if self._repeat_action == 0:
             self._phase = nextPhase
 
-    def _report_to_console(self, args):
-        print(self._agent_name," reporting:", **args)
+    def _report_to_console(self, *args):
+        print(self._agent_name, "reporting:", *args)
