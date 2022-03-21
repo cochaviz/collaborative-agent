@@ -197,21 +197,23 @@ class CustomBaselineAgent(BW4TBrain):
             for message in received[member]:
                 if 'Found' in message and 'colour' not in message:
                     trustBeliefs[member]-=0.1
-                    if (member == "agent1"):
-                        agent1List.append(trustBeliefs[member])
+                    self._write_to_file(trustBeliefs, member)
                     break
                 else:
-                    if (member == "agent1"):
-                        agent1List.append(trustBeliefs[member])
+                    self._write_to_file(trustBeliefs, member)
 
-        print("agent1list")
-        print(agent1List)
-        #print(trustBeliefs)
         # You can change the default value to your preference
-        plt.plot([1, 2, 3, 4])
-        plt.ylabel('some numbers')
-        plt.show()
+        #plt.plot([1, 2, 3, 4])
+        #plt.ylabel('some numbers')
+        #plt.show()
         return trustBeliefs
+
+    def _write_to_file(self, trustBeliefs, member):
+        textFileName = str(member) + "txt"
+        f = open(textFileName, "a")
+        f.write(str(trustBeliefs[member]))
+        f.write('\n')
+        f.close()
 
     # ==== UTILS ====
     #

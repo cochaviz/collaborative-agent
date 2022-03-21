@@ -90,6 +90,8 @@ class BW4TAgentBrain(AgentBrain):
 
         # The central state property (an extended dict with unique searching capabilities)
         self._state = None
+        f = open('agent1Member.txt', 'r+')
+        f.truncate(0)
 
     def initialize(self):
         """ Method called by any world when it starts.
