@@ -193,7 +193,7 @@ class CustomBaselineAgent(BW4TBrain):
         for member in received.keys():
             trustBeliefs[member] = default
         for member in received.keys():
-            print(member)
+            #print(member)
             for message in received[member]:
                 if 'Found' in message and 'colour' not in message:
                     trustBeliefs[member]-=0.1
@@ -209,7 +209,8 @@ class CustomBaselineAgent(BW4TBrain):
         return trustBeliefs
 
     def _write_to_file(self, trustBeliefs, member):
-        textFileName = str(member) + "txt"
+        print(member)
+        textFileName = str(member) + ".txt"
         f = open(textFileName, "a")
         f.write(str(trustBeliefs[member]))
         f.write('\n')
