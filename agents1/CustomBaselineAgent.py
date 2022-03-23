@@ -1,4 +1,4 @@
-from typing import Callable, Dict
+from typing import Callable, Dict, Optional
 import enum, random
 
 from matrx.actions.move_actions import MoveNorth
@@ -184,10 +184,21 @@ class CustomBaselineAgent(BW4TBrain):
         return GrabObject.__name__, {'object_id':item['obj_id']}
 
     def _planPathToGoalPhase(self) -> Action|None:
+        temp = self._current_state.as_dict()
+        drop = temp['Drop_off_0']
+
+        self._navigator.reset_full()
+        self._report_to_console("Going to drop-off location:", drop)
+        self._navigator.add_waypoints([drop['location']])
         self._phase = Phase.FOLLOW_PATH_TO_GOAL
 
     def _followPathToGoalPhase(self) -> Action|None:
-        pass
+        self._state_tracker.update(self._current_state)
+
+        action = self._navigator.get_move_action(self._state_tracker)
+        if action is not None:
+            return action, {}
+
 
     # ==== MESSAGES ====
 
