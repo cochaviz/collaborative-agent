@@ -134,6 +134,10 @@ class CustomBaselineAgent(BW4TBrain):
         return MoveNorth.__name__, {}
 
     def _planPathToCloseItemsPhase(self) -> Action|None:
+        # TODO: Currently only looks for closest item in a room, but sometimes it doesn't
+        # TODO: (cont.) see them all and sometimes even takes one that's one place further away
+        # TODO: (cont.) so could continue searching the room further & be more picky in
+        # TODO: (cont.) object selection
         objects: list[dict]|None = self._current_state.get_room_objects(self._door['room_name'])
 
         if objects is None:
@@ -178,6 +182,8 @@ class CustomBaselineAgent(BW4TBrain):
 
     def _getItemPhase(self) -> Action | None:
         # TODO Check if inventory full -> https://stackoverflow.com/c/tud-cs/questions/11856
+
+        # TODO: Check if the object is a goal object?
         self._phase = Phase.PLAN_PATH_TO_GOAL
         item: dict = self._collectables.pop()
 
@@ -185,7 +191,7 @@ class CustomBaselineAgent(BW4TBrain):
 
     def _planPathToGoalPhase(self) -> Action|None:
         # TODO: Choose the correct drop off location - currently set to 'Drop_off_0'
-
+        # TODO: Ensure that they are dropped off in the correct order
         temp = self._current_state.as_dict()
         drop = temp['Drop_off_0']
 
@@ -195,6 +201,7 @@ class CustomBaselineAgent(BW4TBrain):
         self._phase = Phase.FOLLOW_PATH_TO_GOAL
 
     def _followPathToGoalPhase(self) -> Action|None:
+        # TODO: Ensure block is actually dropped (otherwise will carry it around)
         self._state_tracker.update(self._current_state)
 
         action = self._navigator.get_move_action(self._state_tracker)
