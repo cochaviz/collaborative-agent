@@ -11,7 +11,7 @@ from matrx.agents.agent_utils.state_tracker import StateTracker
 from matrx.actions.door_actions import OpenDoorAction
 from matrx.messages.message import Message
 
-Action = tuple[str, dict]|None
+Action = tuple[str, dict]
 
 class Phase(enum.Enum):
     PLAN_PATH_TO_CLOSED_DOOR=1,
@@ -177,13 +177,15 @@ class CustomBaselineAgent(BW4TBrain):
             self._phase = Phase.GET_ITEM
 
     def _getItemPhase(self) -> Action | None:
-        # TODO Check if inventory full
+        # TODO Check if inventory full -> https://stackoverflow.com/c/tud-cs/questions/11856
         self._phase = Phase.PLAN_PATH_TO_GOAL
         item: dict = self._collectables.pop()
 
         return GrabObject.__name__, {'object_id':item['obj_id']}
 
     def _planPathToGoalPhase(self) -> Action|None:
+        # TODO: Choose the correct drop off location - currently set to 'Drop_off_0'
+
         temp = self._current_state.as_dict()
         drop = temp['Drop_off_0']
 
@@ -198,6 +200,8 @@ class CustomBaselineAgent(BW4TBrain):
         action = self._navigator.get_move_action(self._state_tracker)
         if action is not None:
             return action, {}
+
+        #TODO: continue looking into rooms
 
 
     # ==== MESSAGES ====
