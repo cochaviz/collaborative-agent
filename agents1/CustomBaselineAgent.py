@@ -2,7 +2,7 @@ from typing import Callable, Dict, Optional
 import enum, random
 
 from matrx.actions.move_actions import MoveNorth
-from matrx.actions.object_actions import GrabObject
+from matrx.actions.object_actions import GrabObject, DropObject
 
 from bw4t.BW4TBrain import BW4TBrain
 from matrx.agents.agent_utils.state import State
@@ -11,7 +11,7 @@ from matrx.agents.agent_utils.state_tracker import StateTracker
 from matrx.actions.door_actions import OpenDoorAction
 from matrx.messages.message import Message
 
-Action = tuple[str, dict]
+Action = tuple[str, dict]|None
 
 class Phase(enum.Enum):
     PLAN_PATH_TO_CLOSED_DOOR=1,
@@ -201,7 +201,12 @@ class CustomBaselineAgent(BW4TBrain):
         if action is not None:
             return action, {}
 
-        #TODO: continue looking into rooms
+        block = self._current_state.get_self()
+        self._report_to_console(block)
+
+        self._phase = Phase.FOLLOW_PATH_TO_CLOSED_DOOR
+
+        return DropObject.__name__, {'object_id':block['obj_id']}
 
 
     # ==== MESSAGES ====
