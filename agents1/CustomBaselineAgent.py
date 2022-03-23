@@ -24,7 +24,7 @@ class Phase(enum.Enum):
     GET_ITEM=7
 
     PLAN_PATH_TO_GOAL=8
-    FOLLOW_PATH_TO_GOAL=8
+    FOLLOW_PATH_TO_GOAL=9
 
 class CustomBaselineAgent(BW4TBrain):
     """
@@ -178,12 +178,13 @@ class CustomBaselineAgent(BW4TBrain):
 
     def _getItemPhase(self) -> Action | None:
         # TODO Check if inventory full
-        self._phase = Phase.FOLLOW_PATH_TO_CLOSE_ITEMS
+        self._phase = Phase.PLAN_PATH_TO_GOAL
         item: dict = self._collectables.pop()
+
         return GrabObject.__name__, {'object_id':item['obj_id']}
 
     def _planPathToGoalPhase(self) -> Action|None:
-        pass
+        self._phase = Phase.FOLLOW_PATH_TO_GOAL
 
     def _followPathToGoalPhase(self) -> Action|None:
         pass
