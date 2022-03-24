@@ -2,7 +2,7 @@ from typing import Callable, Dict
 import enum, random
 
 from matrx.actions.move_actions import MoveNorth
-from matrx.actions.object_actions import GrabObject, DropObject
+from matrx.actions.object_actions import GrabObject, DropObject, RemoveObject
 
 from bw4t.BW4TBrain import BW4TBrain
 from matrx.agents.agent_utils.state import State
@@ -11,7 +11,8 @@ from matrx.agents.agent_utils.state_tracker import StateTracker
 from matrx.actions.door_actions import OpenDoorAction
 from matrx.messages.message import Message
 
-Action = tuple[str, dict]|None
+Action = tuple[str, dict] | None
+
 
 class Phase(enum.Enum):
     PLAN_PATH_TO_CLOSED_DOOR=1,
@@ -22,32 +23,34 @@ class Phase(enum.Enum):
     PLAN_ROOM_CHECK=10
     FOLLOW_ROOM_CHECK=11
 
-    PLAN_PATH_TO_TARGET_ITEM=5
-    FOLLOW_PATH_TO_TARGET_ITEM=6
+    PLAN_PATH_TO_TARGET_ITEMS=5
+    FOLLOW_PATH_TO_TARGET_ITEMS=6
     GET_ITEM=7
 
-    PLAN_PATH_TO_GOAL=8
-    FOLLOW_PATH_TO_GOAL=9
+    PLAN_PATH_TO_GOAL = 8
+    FOLLOW_PATH_TO_GOAL = 9
 
 class CustomBaselineAgent(BW4TBrain):
     """
     Agent that contains all non-agent specific logic
     """
-    def __init__(self, settings:Dict[str,object]):
+
+    def __init__(self, settings: Dict[str, object]):
         super().__init__(settings)
         self._phase: Phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
         self._teamMembers = []
 
         self._capacity: int = 1
         self._collectables: list[dict] = []
-        self._target_item: dict|None = None
+        self._target_items: list[dict] = []
         self._is_carrying: list[dict] = []
+        self._goal_blocks: list[dict] = []
 
-        self._agent_name: None|str = None
+        self._agent_name: None | str = None
         self._current_state: State
         self._repeat_action: int = 0
 
-        self._switchPhase: dict[Phase, Callable[[], Action|None]] = {
+        self._switchPhase: dict[Phase, Callable[[], Action | None]] = {
             Phase.PLAN_PATH_TO_CLOSED_DOOR: self._planPathToClosedDoorPhase,
             Phase.FOLLOW_PATH_TO_CLOSED_DOOR: self._followPathToClosedDoorPhase,
             Phase.OPEN_DOOR: self._openDoorPhase,
@@ -56,8 +59,8 @@ class CustomBaselineAgent(BW4TBrain):
             Phase.PLAN_ROOM_CHECK: self._planRoomCheckPhase,
             Phase.FOLLOW_ROOM_CHECK: self._followRoomCheckPhase,
 
-            Phase.PLAN_PATH_TO_TARGET_ITEM: self._planPathToTargetItem,
-            Phase.FOLLOW_PATH_TO_TARGET_ITEM: self._followPathToTargetItemPhase,
+            Phase.PLAN_PATH_TO_TARGET_ITEMS: self._planPathToTargetItemsPhase,
+            Phase.FOLLOW_PATH_TO_TARGET_ITEMS: self._followPathToTargetItemsPhase,
             Phase.GET_ITEM: self._getItemPhase,
 
             Phase.PLAN_PATH_TO_GOAL: self._planPathToGoalPhase,
@@ -67,60 +70,64 @@ class CustomBaselineAgent(BW4TBrain):
     def initialize(self) -> None:
         super().initialize()
         self._state_tracker = StateTracker(agent_id=self.agent_id)
-        self._navigator = Navigator(agent_id=self.agent_id, 
-            action_set=self.action_set, algorithm=Navigator.A_STAR_ALGORITHM)
+        self._navigator = Navigator(agent_id=self.agent_id,
+                                    action_set=self.action_set, algorithm=Navigator.A_STAR_ALGORITHM)
 
     def filter_observations(self, state: State) -> State:
         return state
 
-    def decide_on_bw4t_action(self, state:State) -> tuple[str, dict]:
+    def decide_on_bw4t_action(self, state: State) -> tuple[str, dict]:
         assert state is not None
 
         self._current_state = state
         self._agent_name = self._current_state[self.agent_id]['obj_id']
 
+        if len(self._goal_blocks) == 0:
+            self.__init_goal_targets()
+
         # Add team members
         for member in self._current_state['World']['team_members']:
-            if member!=self._agent_name and member not in self._teamMembers:
+            if member != self._agent_name and member not in self._teamMembers:
                 self._teamMembers.append(member)
 
         # Process messages from team members
-        receivedMessages = self._processMessages(self._teamMembers)
+        received_messages = self._processMessages(self._teamMembers)
 
         # Update trust beliefs for team members
-        self._trustBlief(self._teamMembers, receivedMessages)
-        
+        self._trustBlief(self._teamMembers, received_messages)
+
         while True:
-            actionAndSubject = self._switchPhase[self._phase]()
+            action_and_subject = self._switchPhase[self._phase]()
 
-            if actionAndSubject is not None and actionAndSubject[0] is not None:
-                return actionAndSubject
+            if action_and_subject is not None and action_and_subject[0] is not None:
+                return action_and_subject
 
-    # ==== PHASE ====
+    # ==== DOOR PHASE ====
 
-    def _planPathToClosedDoorPhase(self) -> Action|None:
+    def _planPathToClosedDoorPhase(self) -> Action | None:
+        # TODO: If all doors are open then send agent elsewhere?
         self._navigator.reset_full()
 
-        closedDoors = [door for door in self._current_state.values()
-            if 'class_inheritance' in door and 'Door' in door['class_inheritance'] and not door['is_open']]
+        closed_doors = [door for door in self._current_state.values()
+                       if 'class_inheritance' in door and 'Door' in door['class_inheritance'] and not door['is_open']]
 
-        if len(closedDoors)==0:
+        if len(closed_doors) == 0:
             return None
 
         # Randomly pick a closed door
-        self._door = random.choice(closedDoors)
-        doorLoc = self._door['location']
+        self._door = random.choice(closed_doors)
+        door_loc = self._door['location']
 
         # Location in front of door is south from door
-        doorLoc = doorLoc[0],doorLoc[1]+1
+        door_loc = door_loc[0], door_loc[1] + 1
 
         # Send message of current action
         self._sendMessage('Moving to door of ' + self._door['room_name'])
-        self._navigator.add_waypoints([doorLoc])
+        self._navigator.add_waypoints([door_loc])
 
-        self._phase=Phase.FOLLOW_PATH_TO_CLOSED_DOOR
+        self._phase = Phase.FOLLOW_PATH_TO_CLOSED_DOOR
 
-    def _followPathToClosedDoorPhase(self) -> Action|None:
+    def _followPathToClosedDoorPhase(self) -> Action | None:
         self._state_tracker.update(self._current_state)
 
         # Follow path to door
@@ -129,19 +136,21 @@ class CustomBaselineAgent(BW4TBrain):
         if action is not None:
             return action, {}
 
-        self._phase=Phase.OPEN_DOOR
+        self._phase = Phase.OPEN_DOOR
 
-    def _openDoorPhase(self) -> Action|None:
-        self._phase=Phase.ENTER_ROOM
+    def _openDoorPhase(self) -> Action | None:
+        self._phase = Phase.ENTER_ROOM
 
         # Open door
-        return OpenDoorAction.__name__, {'object_id':self._door['obj_id']}
+        return OpenDoorAction.__name__, {'object_id': self._door['obj_id']}
 
-    def _enterRoomPhase(self) -> Action|None:
+    def _enterRoomPhase(self) -> Action | None:
         self._sendMessage("Trying to enter room")
         self._repeat_then(1, Phase.PLAN_ROOM_CHECK)
 
         return MoveNorth.__name__, {}
+
+    # ==== ROOM PHASE ====
 
     def _planRoomCheckPhase(self) -> Action|None:
         current_x, current_y = self._current_state[self.agent_id]['location']
@@ -163,13 +172,15 @@ class CustomBaselineAgent(BW4TBrain):
             return action, {}
 
         if len(self._collectables) == 0:
-            self._target_item = None
+            self._target_items.clear()
         else:
-            # TODO: Filter goal object
-            self._target_item = self._collectables.pop()
+            goal_target_items = self.__check_collectables()
+            self._report_to_console("Found the following items:", goal_target_items)
+            # This way, the StrongAgent can just pick up all goal objects it encounters
+            self._target_items = goal_target_items[0:self._capacity]
             self._collectables.clear()
 
-        self._phase = Phase.PLAN_PATH_TO_TARGET_ITEM
+        self._phase = Phase.PLAN_PATH_TO_TARGET_ITEMS
 
     def __saveObjectsAround(self) -> None:
         objects: list[dict]|None = self._current_state.get_room_objects(self._door['room_name'])
@@ -183,18 +194,19 @@ class CustomBaselineAgent(BW4TBrain):
             if collectable not in self._collectables:
                 self._collectables.append(collectable)
 
-    def _planPathToTargetItem(self) -> Action|None:
-        if self._target_item is None:
+    def _planPathToTargetItemsPhase(self) -> Action|None:
+        if len(self._target_items) == 0:
             self._report_to_console("Can't find any collectable objects in room", self._door['room_name'])
             self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
             return
 
         self._navigator.reset_full()
-        self._report_to_console("Going to object location:", self._target_item['location'])
-        self._navigator.add_waypoints([self._target_item['location']])
-        self._phase = Phase.FOLLOW_PATH_TO_TARGET_ITEM
+        self._report_to_console("Going to object :", self._target_items[0]['location'])
+        # TODO: Might want to go through over all target_items, for now just visit one
+        self._navigator.add_waypoints([self._target_items[0]['location']])
+        self._phase = Phase.FOLLOW_PATH_TO_TARGET_ITEMS
 
-    def _followPathToTargetItemPhase(self) -> Action|None:
+    def _followPathToTargetItemsPhase(self) -> Action|None:
         self._state_tracker.update(self._current_state)
 
         action = self._navigator.get_move_action(self._state_tracker)
@@ -202,51 +214,65 @@ class CustomBaselineAgent(BW4TBrain):
         if action is not None:
             return action, {}
 
-        if self._target_item is None:
+        if len(self._target_items) == 0:
             self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
         else:
             self._report_to_console("Grabbing item from:", len(self._collectables))
             self._phase = Phase.GET_ITEM
 
     def _getItemPhase(self) -> Action | None:
-        # Should never happen unless strong agent
+        # TODO probably doesn't need to be its own phase
+        # Should never happen since immediately when picking up something, continue to drop off at goal
         if len(self._is_carrying) == self._capacity:
             self._phase = Phase.PLAN_PATH_TO_GOAL
 
         self._phase = Phase.PLAN_PATH_TO_GOAL
 
-        assert self._target_item is not None
-        self._is_carrying.append(self._target_item)
-        self._target_item = None
+        assert len(self._target_items) != 0
+
+        self._is_carrying.append(self._target_items[0])
+        self._target_items.clear()
 
         return GrabObject.__name__, {'object_id':self._is_carrying[-1]['obj_id']}
 
-    def _planPathToGoalPhase(self) -> Action|None:
-        # TODO: Choose the correct drop off location - currently set to 'Drop_off_0'
+    # ==== GOAL PHASE ====
+
+    def _planPathToGoalPhase(self) -> Action | None:
         # TODO: Ensure that they are dropped off in the correct order
-        temp = self._current_state.as_dict()
-        drop = temp['Drop_off_0']
+        # Could possibly be done a bit more elegantly
+        target_locations: list[tuple] = \
+            map(lambda e: self._goal_blocks[e['goal_index']]['location'], self._is_carrying)
 
-        self._navigator.reset_full()
-        self._report_to_console("Going to drop-off location:", drop)
-        self._navigator.add_waypoints([drop['location']])
-        self._phase = Phase.FOLLOW_PATH_TO_GOAL
+        # Not sure if this is okay, but if the agent is carrying an object that isn't a
+        # goal object, then we remove it
+        if len(self._is_carrying) == 0:
+            self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
+            # TODO: Restore this by going through all the items that are not goals and removing them?
+            # return RemoveObject.__name__, {'object_id': self._is_carrying[0]['obj_id']}
+            return
 
-    def _followPathToGoalPhase(self) -> Action|None:
-        # TODO: Ensure block is actually dropped (otherwise will carry it around)
+        else:  # Drop off goal object to its correct location
+            self._navigator.reset_full()
+            self._report_to_console("Going to drop-off location: ", target_locations)
+            self._navigator.add_waypoints(target_locations)
+            self._phase = Phase.FOLLOW_PATH_TO_GOAL
+
+    def _followPathToGoalPhase(self) -> Action | None:
+        # TODO: Check if goal object has already been placed,
+        #  there are multiple of the same shapes that match the goals
         self._state_tracker.update(self._current_state)
 
         action = self._navigator.get_move_action(self._state_tracker)
+
         if action is not None:
             return action, {}
 
-        block = self._current_state.get_self()
+        block: dict = self._is_carrying.pop()
         self._report_to_console("Droppinng:", block)
 
         self._phase = Phase.FOLLOW_PATH_TO_CLOSED_DOOR
 
-        return DropObject.__name__, self._is_carrying.pop()
-
+        return DropObject.__name__, {'object_id': block['obj_id']}
 
     # ==== MESSAGES ====
 
@@ -268,7 +294,7 @@ class CustomBaselineAgent(BW4TBrain):
         for mssg in self.received_messages:
             for member in teamMembers:
                 if mssg.from_id == member:
-                    receivedMessages[member].append(mssg.content)       
+                    receivedMessages[member].append(mssg.content)
         return receivedMessages
 
     # ==== TRUST ====
@@ -285,7 +311,7 @@ class CustomBaselineAgent(BW4TBrain):
         for member in received.keys():
             for message in received[member]:
                 if 'Found' in message and 'colour' not in message:
-                    trustBeliefs[member]-=0.1
+                    trustBeliefs[member] -= 0.1
                     break
         return trustBeliefs
 
@@ -310,3 +336,29 @@ class CustomBaselineAgent(BW4TBrain):
             return obj['visualization']['colour'] + " " + str(obj['visualization']['shape'])
         else:
             return 'not a shape'
+
+    def __init_goal_targets(self) -> None:
+        temp = self._current_state.as_dict()
+
+        # Get all the Collect_Blocks
+        self._goal_blocks = [val for key, val in temp.items() if 'Collect_Block' in key]
+
+    def __check_collectables(self) -> list[dict]:
+        target_blocks: list[dict] = []
+
+        for block in self._collectables:
+            for index, goal_block in enumerate(self._goal_blocks):
+                if self.__compare_blocks(block, goal_block):
+                    self._report_to_console("Yes! Block matches a drop off point", block, " & ", goal_block)
+                    # Not sure if this is best solution, but this way it's quite simple to go
+                    # from carrying an item to matching it to a goal
+                    block['goal_index'] = index
+                    target_blocks.append(block)
+                else:
+                    self._report_to_console("These do not match: ", block, " & ", goal_block)
+
+        return target_blocks
+
+    def __compare_blocks(self, a, b) -> bool:
+        return a['visualization']['colour'] == b['visualization']['colour'] and \
+                    a['visualization']['shape'] == b['visualization']['shape']
