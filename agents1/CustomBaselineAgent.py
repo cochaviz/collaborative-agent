@@ -11,36 +11,39 @@ from matrx.agents.agent_utils.state_tracker import StateTracker
 from matrx.actions.door_actions import OpenDoorAction
 from matrx.messages.message import Message
 
-Action = tuple[str, dict]|None
+Action = tuple[str, dict] | None
+
 
 class Phase(enum.Enum):
-    PLAN_PATH_TO_CLOSED_DOOR=1,
-    FOLLOW_PATH_TO_CLOSED_DOOR=2,
-    OPEN_DOOR=3
-    ENTER_ROOM=4
+    PLAN_PATH_TO_CLOSED_DOOR = 1,
+    FOLLOW_PATH_TO_CLOSED_DOOR = 2,
+    OPEN_DOOR = 3
+    ENTER_ROOM = 4
 
-    PLAN_PATH_TO_CLOSE_ITEMS=5
-    FOLLOW_PATH_TO_CLOSE_ITEMS=6
-    GET_ITEM=7
+    PLAN_PATH_TO_CLOSE_ITEMS = 5
+    FOLLOW_PATH_TO_CLOSE_ITEMS = 6
+    GET_ITEM = 7
 
-    PLAN_PATH_TO_GOAL=8
-    FOLLOW_PATH_TO_GOAL=9
+    PLAN_PATH_TO_GOAL = 8
+    FOLLOW_PATH_TO_GOAL = 9
+
 
 class CustomBaselineAgent(BW4TBrain):
     """
     Agent that contains all non-agent specific logic
     """
-    def __init__(self, settings:Dict[str,object]):
+
+    def __init__(self, settings: Dict[str, object]):
         super().__init__(settings)
         self._phase: Phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
         self._teamMembers = []
 
         self._collectables: list[dict] = []
-        self._agent_name: None|str = None
+        self._agent_name: None | str = None
         self._current_state: State
         self._repeat_action: int = 0
 
-        self._switchPhase: dict[Phase, Callable[[], Action|None]] = {
+        self._switchPhase: dict[Phase, Callable[[], Action | None]] = {
             Phase.PLAN_PATH_TO_CLOSED_DOOR: self._planPathToClosedDoorPhase,
             Phase.FOLLOW_PATH_TO_CLOSED_DOOR: self._followPathToClosedDoorPhase,
             Phase.OPEN_DOOR: self._openDoorPhase,
@@ -57,13 +60,13 @@ class CustomBaselineAgent(BW4TBrain):
     def initialize(self) -> None:
         super().initialize()
         self._state_tracker = StateTracker(agent_id=self.agent_id)
-        self._navigator = Navigator(agent_id=self.agent_id, 
-            action_set=self.action_set, algorithm=Navigator.A_STAR_ALGORITHM)
+        self._navigator = Navigator(agent_id=self.agent_id,
+                                    action_set=self.action_set, algorithm=Navigator.A_STAR_ALGORITHM)
 
     def filter_observations(self, state: State) -> State:
         return state
 
-    def decide_on_bw4t_action(self, state:State) -> tuple[str, dict]:
+    def decide_on_bw4t_action(self, state: State) -> tuple[str, dict]:
         assert state is not None
 
         self._current_state = state
@@ -71,46 +74,46 @@ class CustomBaselineAgent(BW4TBrain):
 
         # Add team members
         for member in self._current_state['World']['team_members']:
-            if member!=self._agent_name and member not in self._teamMembers:
+            if member != self._agent_name and member not in self._teamMembers:
                 self._teamMembers.append(member)
 
         # Process messages from team members
-        receivedMessages = self._processMessages(self._teamMembers)
+        received_messages = self._processMessages(self._teamMembers)
 
         # Update trust beliefs for team members
-        self._trustBlief(self._teamMembers, receivedMessages)
-        
-        while True:
-            actionAndSubject = self._switchPhase[self._phase]()
+        self._trustBlief(self._teamMembers, received_messages)
 
-            if actionAndSubject is not None and actionAndSubject[0] is not None:
-                return actionAndSubject
+        while True:
+            action_and_subject = self._switchPhase[self._phase]()
+
+            if action_and_subject is not None and action_and_subject[0] is not None:
+                return action_and_subject
 
     # ==== PHASE ====
 
-    def _planPathToClosedDoorPhase(self) -> Action|None:
+    def _planPathToClosedDoorPhase(self) -> Action | None:
         self._navigator.reset_full()
 
-        closedDoors = [door for door in self._current_state.values()
-            if 'class_inheritance' in door and 'Door' in door['class_inheritance'] and not door['is_open']]
+        closed_doors = [door for door in self._current_state.values()
+                       if 'class_inheritance' in door and 'Door' in door['class_inheritance'] and not door['is_open']]
 
-        if len(closedDoors)==0:
+        if len(closed_doors) == 0:
             return None
 
         # Randomly pick a closed door
-        self._door = random.choice(closedDoors)
-        doorLoc = self._door['location']
+        self._door = random.choice(closed_doors)
+        door_loc = self._door['location']
 
         # Location in front of door is south from door
-        doorLoc = doorLoc[0],doorLoc[1]+1
+        door_loc = door_loc[0], door_loc[1] + 1
 
         # Send message of current action
         self._sendMessage('Moving to door of ' + self._door['room_name'])
-        self._navigator.add_waypoints([doorLoc])
+        self._navigator.add_waypoints([door_loc])
 
-        self._phase=Phase.FOLLOW_PATH_TO_CLOSED_DOOR
+        self._phase = Phase.FOLLOW_PATH_TO_CLOSED_DOOR
 
-    def _followPathToClosedDoorPhase(self) -> Action|None:
+    def _followPathToClosedDoorPhase(self) -> Action | None:
         self._state_tracker.update(self._current_state)
 
         # Follow path to door
@@ -119,26 +122,26 @@ class CustomBaselineAgent(BW4TBrain):
         if action is not None:
             return action, {}
 
-        self._phase=Phase.OPEN_DOOR
+        self._phase = Phase.OPEN_DOOR
 
-    def _openDoorPhase(self) -> Action|None:
-        self._phase=Phase.ENTER_ROOM
+    def _openDoorPhase(self) -> Action | None:
+        self._phase = Phase.ENTER_ROOM
 
         # Open door
-        return OpenDoorAction.__name__, {'object_id':self._door['obj_id']}
+        return OpenDoorAction.__name__, {'object_id': self._door['obj_id']}
 
-    def _enterRoomPhase(self) -> Action|None:
+    def _enterRoomPhase(self) -> Action | None:
         self._sendMessage("Trying to enter room")
         self._repeat_then(1, Phase.PLAN_PATH_TO_CLOSE_ITEMS)
 
         return MoveNorth.__name__, {}
 
-    def _planPathToCloseItemsPhase(self) -> Action|None:
+    def _planPathToCloseItemsPhase(self) -> Action | None:
         # TODO: Currently only looks for closest item in a room, but sometimes it doesn't
         # TODO: (cont.) see them all and sometimes even takes one that's one place further away
         # TODO: (cont.) so could continue searching the room further & be more picky in
         # TODO: (cont.) object selection
-        objects: list[dict]|None = self._current_state.get_room_objects(self._door['room_name'])
+        objects: list[dict] | None = self._current_state.get_room_objects(self._door['room_name'])
 
         if objects is None:
             # TODO Use correct format
@@ -166,7 +169,7 @@ class CustomBaselineAgent(BW4TBrain):
         self._navigator.add_waypoints([self._collectables[0]['location']])
         self._phase = Phase.FOLLOW_PATH_TO_CLOSE_ITEMS
 
-    def _followPathToCloseItemsPhase(self) -> Action|None:
+    def _followPathToCloseItemsPhase(self) -> Action | None:
         self._state_tracker.update(self._current_state)
 
         action = self._navigator.get_move_action(self._state_tracker)
@@ -187,20 +190,37 @@ class CustomBaselineAgent(BW4TBrain):
         self._phase = Phase.PLAN_PATH_TO_GOAL
         item: dict = self._collectables.pop()
 
-        return GrabObject.__name__, {'object_id':item['obj_id']}
+        return GrabObject.__name__, {'object_id': item['obj_id']}
 
-    def _planPathToGoalPhase(self) -> Action|None:
+    def _planPathToGoalPhase(self) -> Action | None:
         # TODO: Choose the correct drop off location - currently set to 'Drop_off_0'
         # TODO: Ensure that they are dropped off in the correct order
         temp = self._current_state.as_dict()
-        drop = temp['Drop_off_0']
+
+        # Get all the "Drop_off_" points
+        drop: list[dict] = [val for key, val in temp.items() if 'Drop_off_' in key]
+
+        # Keep these values for communication & figuring things out (can be expanded if necessary)
+        key_val_list: list[str] = ['obj_id', 'location', 'visualization']
+        drop_loc: list = []  # temp list
+
+        for i in range(len(drop)):
+            drop_loc.append({key: value for (key, value) in drop[i].items() if key in key_val_list})
+
+        # Reverse the list (since we need to drop off in this reversed order)
+        drop_loc.reverse()
+
+        d = temp['Drop_off_0']
+
+        self._report_to_console("Drop off locations: ")
+        self._report_to_console(str(drop_loc))
 
         self._navigator.reset_full()
-        self._report_to_console("Going to drop-off location:", drop)
-        self._navigator.add_waypoints([drop['location']])
+        self._report_to_console("Going to drop-off location:", d)
+        self._navigator.add_waypoints([d['location']])
         self._phase = Phase.FOLLOW_PATH_TO_GOAL
 
-    def _followPathToGoalPhase(self) -> Action|None:
+    def _followPathToGoalPhase(self) -> Action | None:
         # TODO: Ensure block is actually dropped (otherwise will carry it around)
         self._state_tracker.update(self._current_state)
 
@@ -213,8 +233,7 @@ class CustomBaselineAgent(BW4TBrain):
 
         self._phase = Phase.FOLLOW_PATH_TO_CLOSED_DOOR
 
-        return DropObject.__name__, {'object_id':block['obj_id']}
-
+        return DropObject.__name__, {'object_id': block['obj_id']}
 
     # ==== MESSAGES ====
 
@@ -236,7 +255,7 @@ class CustomBaselineAgent(BW4TBrain):
         for mssg in self.received_messages:
             for member in teamMembers:
                 if mssg.from_id == member:
-                    receivedMessages[member].append(mssg.content)       
+                    receivedMessages[member].append(mssg.content)
         return receivedMessages
 
     # ==== TRUST ====
@@ -253,7 +272,7 @@ class CustomBaselineAgent(BW4TBrain):
         for member in received.keys():
             for message in received[member]:
                 if 'Found' in message and 'colour' not in message:
-                    trustBeliefs[member]-=0.1
+                    trustBeliefs[member] -= 0.1
                     break
         return trustBeliefs
 
