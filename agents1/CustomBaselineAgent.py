@@ -38,8 +38,10 @@ class CustomBaselineAgent(BW4TBrain):
         self._phase: Phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
         self._teamMembers = []
 
+        self._capacity: int = 1
         self._collectables: list[dict] = []
         self._target_item: dict|None = None
+        self._is_carrying: list[dict] = []
 
         self._agent_name: None|str = None
         self._current_state: State
@@ -207,14 +209,17 @@ class CustomBaselineAgent(BW4TBrain):
             self._phase = Phase.GET_ITEM
 
     def _getItemPhase(self) -> Action | None:
-        # TODO Check if inventory full -> https://stackoverflow.com/c/tud-cs/questions/11856
+        # Should never happen unless strong agent
+        if len(self._is_carrying) == self._capacity:
+            self._phase = Phase.PLAN_PATH_TO_GOAL
+
         self._phase = Phase.PLAN_PATH_TO_GOAL
 
         assert self._target_item is not None
-        item: dict = self._target_item
+        self._is_carrying.append(self._target_item)
         self._target_item = None
 
-        return GrabObject.__name__, {'object_id':item['obj_id']}
+        return GrabObject.__name__, {'object_id':self._is_carrying[-1]['obj_id']}
 
     def _planPathToGoalPhase(self) -> Action|None:
         # TODO: Choose the correct drop off location - currently set to 'Drop_off_0'
@@ -236,11 +241,11 @@ class CustomBaselineAgent(BW4TBrain):
             return action, {}
 
         block = self._current_state.get_self()
-        self._report_to_console(block)
+        self._report_to_console("Droppinng:", block)
 
         self._phase = Phase.FOLLOW_PATH_TO_CLOSED_DOOR
 
-        return DropObject.__name__, {'object_id':block['obj_id']}
+        return DropObject.__name__, self._is_carrying.pop()
 
 
     # ==== MESSAGES ====
