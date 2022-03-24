@@ -2,7 +2,7 @@ from typing import Callable, Dict, Optional
 import enum, random
 
 from matrx.actions.move_actions import MoveNorth
-from matrx.actions.object_actions import GrabObject, DropObject
+from matrx.actions.object_actions import GrabObject, DropObject, RemoveObject
 
 from bw4t.BW4TBrain import BW4TBrain
 from matrx.agents.agent_utils.state import State
@@ -92,6 +92,7 @@ class CustomBaselineAgent(BW4TBrain):
     # ==== PHASE ====
 
     def _planPathToClosedDoorPhase(self) -> Action | None:
+        # TODO: If all doors are open then send agent elsewhere?
         self._navigator.reset_full()
 
         closed_doors = [door for door in self._current_state.values()
@@ -138,9 +139,9 @@ class CustomBaselineAgent(BW4TBrain):
 
     def _planPathToCloseItemsPhase(self) -> Action | None:
         # TODO: Currently only looks for closest item in a room, but sometimes it doesn't
-        # TODO: (cont.) see them all and sometimes even takes one that's one place further away
-        # TODO: (cont.) so could continue searching the room further & be more picky in
-        # TODO: (cont.) object selection
+        #  see them all and sometimes even takes one that's one place further away
+        #  so could continue searching the room further & be more picky in
+        #  object selection
         objects: list[dict] | None = self._current_state.get_room_objects(self._door['room_name'])
 
         if objects is None:
@@ -162,12 +163,15 @@ class CustomBaselineAgent(BW4TBrain):
 
         printable_collectables = list(map(lambda e: self._object_as_shape(e), collectables))
         self._report_to_console("Found collectable objects:", printable_collectables)
-        self._report_to_console("Getting the following object:", printable_collectables[0])
-
-        self._navigator.reset_full()
-        self._report_to_console("Going to object location:", self._collectables[0]['location'])
-        self._navigator.add_waypoints([self._collectables[0]['location']])
-        self._phase = Phase.FOLLOW_PATH_TO_CLOSE_ITEMS
+        # Sometimes list index out of range
+        if len(printable_collectables) > 0:
+            self._report_to_console("Getting the following object:", printable_collectables[0])
+            self._navigator.reset_full()
+            self._report_to_console("Going to object location:", self._collectables[0]['location'])
+            self._navigator.add_waypoints([self._collectables[0]['location']])
+            self._phase = Phase.FOLLOW_PATH_TO_CLOSE_ITEMS
+        else:
+            self._phase = Phase.FOLLOW_PATH_TO_CLOSED_DOOR
 
     def _followPathToCloseItemsPhase(self) -> Action | None:
         self._state_tracker.update(self._current_state)
@@ -193,43 +197,63 @@ class CustomBaselineAgent(BW4TBrain):
         return GrabObject.__name__, {'object_id': item['obj_id']}
 
     def _planPathToGoalPhase(self) -> Action | None:
-        # TODO: Choose the correct drop off location - currently set to 'Drop_off_0'
         # TODO: Ensure that they are dropped off in the correct order
+        #  this could also be done elsewhere perhaps?
         temp = self._current_state.as_dict()
 
-        # Get all the "Drop_off_" points
-        drop: list[dict] = [val for key, val in temp.items() if 'Drop_off_' in key]
+        # Get all the 'Collect_Block's
+        drop: list[dict] = [val for key, val in temp.items() if 'Collect_Block' in key]
 
-        # Keep these values for communication & figuring things out (can be expanded if necessary)
-        key_val_list: list[str] = ['obj_id', 'location', 'visualization']
-        drop_loc: list = []  # temp list
+        drop_shape: list = []  # temp list for location shapes
+        drop_loc: list = []  # temp list for locations
 
         for i in range(len(drop)):
-            drop_loc.append({key: value for (key, value) in drop[i].items() if key in key_val_list})
+            drop_shape.append(self._object_as_shape(drop[i]))
+            drop_loc.append(drop[i]['location'])
 
-        # Reverse the list (since we need to drop off in this reversed order)
-        drop_loc.reverse()
+        # Get the object that agent is currently carrying
+        # TODO: Will need to be adjusted for StrongAgent
+        b = self._current_state.get_self()
+        back_up = b['is_carrying']
+        if len(back_up) > 0:
+            block = self._object_as_shape(back_up[0])
+        else:
+            self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
 
-        d = temp['Drop_off_0']
+        go = []
 
-        self._report_to_console("Drop off locations: ")
-        self._report_to_console(str(drop_loc))
+        for i in range(len(drop_shape)):
+            self._report_to_console(drop_shape[i])
+            if block == drop_shape[i]:
+                self._report_to_console("Yes! Block matches a drop off point", block, " & ", drop_shape[i])
+                go.append(drop_loc[i])
+            else:
+                self._report_to_console("These do not match: ", block, " & ", drop_shape[i])
 
-        self._navigator.reset_full()
-        self._report_to_console("Going to drop-off location:", d)
-        self._navigator.add_waypoints([d['location']])
-        self._phase = Phase.FOLLOW_PATH_TO_GOAL
+        # Not sure if this is okay, but if the agent is carrying an object that isn't a
+        # goal object, then we remove it
+        if (len(go) != 1):
+            self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
+            return RemoveObject.__name__, {'object_id': back_up[0]['obj_id']}
+
+        else:  # Drop off goal object to its correct location
+            self._navigator.reset_full()
+            self._report_to_console("Going to drop-off location: ", go)
+            self._navigator.add_waypoints(go)
+            self._phase = Phase.FOLLOW_PATH_TO_GOAL
 
     def _followPathToGoalPhase(self) -> Action | None:
-        # TODO: Ensure block is actually dropped (otherwise will carry it around)
+        # TODO: Check if goal object has already been placed,
+        #  there are multiple of the same shapes that match the goals
         self._state_tracker.update(self._current_state)
 
         action = self._navigator.get_move_action(self._state_tracker)
         if action is not None:
             return action, {}
 
-        block = self._current_state.get_self()
-        self._report_to_console(block)
+        b = self._current_state.get_self()
+        block = b['is_carrying'][0]
+        self._report_to_console("Block: ", block)
 
         self._phase = Phase.FOLLOW_PATH_TO_CLOSED_DOOR
 
