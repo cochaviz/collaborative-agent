@@ -1,4 +1,4 @@
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict
 import enum, random
 
 from matrx.actions.move_actions import MoveNorth
@@ -17,10 +17,13 @@ class Phase(enum.Enum):
     PLAN_PATH_TO_CLOSED_DOOR=1,
     FOLLOW_PATH_TO_CLOSED_DOOR=2,
     OPEN_DOOR=3
-    ENTER_ROOM=4
 
-    PLAN_PATH_TO_CLOSE_ITEMS=5
-    FOLLOW_PATH_TO_CLOSE_ITEMS=6
+    ENTER_ROOM=4
+    PLAN_ROOM_CHECK=10
+    FOLLOW_ROOM_CHECK=11
+
+    PLAN_PATH_TO_TARGET_ITEM=5
+    FOLLOW_PATH_TO_TARGET_ITEM=6
     GET_ITEM=7
 
     PLAN_PATH_TO_GOAL=8
@@ -36,6 +39,8 @@ class CustomBaselineAgent(BW4TBrain):
         self._teamMembers = []
 
         self._collectables: list[dict] = []
+        self._target_item: dict|None = None
+
         self._agent_name: None|str = None
         self._current_state: State
         self._repeat_action: int = 0
@@ -44,10 +49,13 @@ class CustomBaselineAgent(BW4TBrain):
             Phase.PLAN_PATH_TO_CLOSED_DOOR: self._planPathToClosedDoorPhase,
             Phase.FOLLOW_PATH_TO_CLOSED_DOOR: self._followPathToClosedDoorPhase,
             Phase.OPEN_DOOR: self._openDoorPhase,
-            Phase.ENTER_ROOM: self._enterRoomPhase,
 
-            Phase.PLAN_PATH_TO_CLOSE_ITEMS: self._planPathToCloseItemsPhase,
-            Phase.FOLLOW_PATH_TO_CLOSE_ITEMS: self._followPathToCloseItemsPhase,
+            Phase.ENTER_ROOM: self._enterRoomPhase,
+            Phase.PLAN_ROOM_CHECK: self._planRoomCheckPhase,
+            Phase.FOLLOW_ROOM_CHECK: self._followRoomCheckPhase,
+
+            Phase.PLAN_PATH_TO_TARGET_ITEM: self._planPathToTargetItem,
+            Phase.FOLLOW_PATH_TO_TARGET_ITEM: self._followPathToTargetItemPhase,
             Phase.GET_ITEM: self._getItemPhase,
 
             Phase.PLAN_PATH_TO_GOAL: self._planPathToGoalPhase,
@@ -129,21 +137,42 @@ class CustomBaselineAgent(BW4TBrain):
 
     def _enterRoomPhase(self) -> Action|None:
         self._sendMessage("Trying to enter room")
-        self._repeat_then(1, Phase.PLAN_PATH_TO_CLOSE_ITEMS)
+        self._repeat_then(1, Phase.PLAN_ROOM_CHECK)
 
         return MoveNorth.__name__, {}
 
-    def _planPathToCloseItemsPhase(self) -> Action|None:
-        # TODO: Currently only looks for closest item in a room, but sometimes it doesn't
-        # TODO: (cont.) see them all and sometimes even takes one that's one place further away
-        # TODO: (cont.) so could continue searching the room further & be more picky in
-        # TODO: (cont.) object selection
+    def _planRoomCheckPhase(self) -> Action|None:
+        current_x, current_y = self._current_state[self.agent_id]['location']
+        next_locations: list[tuple[int, int]] = \
+            [(current_x, current_y-1), (current_x-1, current_y-1), (current_x-1, current_y)]
+
+        self._navigator.reset_full()
+        self._navigator.add_waypoints(next_locations)
+        self._phase = Phase.FOLLOW_ROOM_CHECK
+
+    def _followRoomCheckPhase(self) -> Action|None:
+        self.__saveObjectsAround()
+        self._report_to_console(self._collectables)
+
+        self._state_tracker.update(self._current_state)
+        action = self._navigator.get_move_action(self._state_tracker)
+
+        if action is not None:
+            return action, {}
+
+        if len(self._collectables) == 0:
+            self._target_item = None
+        else:
+            # TODO: Filter goal object
+            self._target_item = self._collectables.pop()
+            self._collectables.clear()
+
+        self._phase = Phase.PLAN_PATH_TO_TARGET_ITEM
+
+    def __saveObjectsAround(self) -> None:
         objects: list[dict]|None = self._current_state.get_room_objects(self._door['room_name'])
 
         if objects is None:
-            # TODO Use correct format
-            self._report_to_console("Can't find any objects in " + self._door['room_name'])
-            self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
             return
 
         collectables: list[dict] = list(filter(lambda e: 'CollectableBlock' in e['class_inheritance'], objects))
@@ -152,21 +181,18 @@ class CustomBaselineAgent(BW4TBrain):
             if collectable not in self._collectables:
                 self._collectables.append(collectable)
 
-        if len(self._collectables) == 0:
+    def _planPathToTargetItem(self) -> Action|None:
+        if self._target_item is None:
             self._report_to_console("Can't find any collectable objects in room", self._door['room_name'])
             self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
             return
 
-        printable_collectables = list(map(lambda e: self._object_as_shape(e), collectables))
-        self._report_to_console("Found collectable objects:", printable_collectables)
-        self._report_to_console("Getting the following object:", printable_collectables[0])
-
         self._navigator.reset_full()
-        self._report_to_console("Going to object location:", self._collectables[0]['location'])
-        self._navigator.add_waypoints([self._collectables[0]['location']])
-        self._phase = Phase.FOLLOW_PATH_TO_CLOSE_ITEMS
+        self._report_to_console("Going to object location:", self._target_item['location'])
+        self._navigator.add_waypoints([self._target_item['location']])
+        self._phase = Phase.FOLLOW_PATH_TO_TARGET_ITEM
 
-    def _followPathToCloseItemsPhase(self) -> Action|None:
+    def _followPathToTargetItemPhase(self) -> Action|None:
         self._state_tracker.update(self._current_state)
 
         action = self._navigator.get_move_action(self._state_tracker)
@@ -174,7 +200,7 @@ class CustomBaselineAgent(BW4TBrain):
         if action is not None:
             return action, {}
 
-        if len(self._collectables) == 0:
+        if self._target_item is None:
             self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
         else:
             self._report_to_console("Grabbing item from:", len(self._collectables))
@@ -182,10 +208,11 @@ class CustomBaselineAgent(BW4TBrain):
 
     def _getItemPhase(self) -> Action | None:
         # TODO Check if inventory full -> https://stackoverflow.com/c/tud-cs/questions/11856
-
-        # TODO: Check if the object is a goal object?
         self._phase = Phase.PLAN_PATH_TO_GOAL
-        item: dict = self._collectables.pop()
+
+        assert self._target_item is not None
+        item: dict = self._target_item
+        self._target_item = None
 
         return GrabObject.__name__, {'object_id':item['obj_id']}
 
