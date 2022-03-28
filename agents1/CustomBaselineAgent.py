@@ -44,6 +44,7 @@ class CustomBaselineAgent(BW4TBrain):
         self._collectables: list[dict] = []
         self._target_items: list[dict] = []
         self._is_carrying: list[dict] = []
+
         self._goal_blocks: list[dict] = []
 
         # dropping items on the goals has to go in the right order
@@ -169,7 +170,6 @@ class CustomBaselineAgent(BW4TBrain):
     def _followRoomCheckPhase(self) -> Action|None:
         self._sendMessage('Searching through ' + self._door['room_name'])
         self.__saveObjectsAround()
-        self._report_to_console(self._collectables)
 
         self._state_tracker.update(self._current_state)
         action = self._navigator.get_move_action(self._state_tracker)
@@ -180,8 +180,10 @@ class CustomBaselineAgent(BW4TBrain):
         if len(self._collectables) == 0:
             self._target_items.clear()
         else:
-            goal_target_items = self.__check_collectables()
-            self._report_to_console("Found the following items:", goal_target_items)
+            goal_target_items, all_found_goal_items = self.__check_collectables()
+            for goal in all_found_goal_items:
+                self._sendMessage('Found goal block ' + str(goal['visualization']) + ' at location ' + str(goal['location']))
+
             # This way, the StrongAgent can just pick up all goal objects it encounters
             self._target_items = goal_target_items[0:self._capacity]
             self._collectables.clear()
@@ -190,13 +192,10 @@ class CustomBaselineAgent(BW4TBrain):
 
     def _planPathToTargetItemsPhase(self) -> Action|None:
         if len(self._target_items) == 0:
-            self._report_to_console("Can't find any collectable objects in room", self._door['room_name'])
             self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
             return
 
         self._navigator.reset_full()
-        self._sendMessage('Found goal block ' + str(self._target_items[0]['visualization']) + ' at location ' + str(self._target_items[0]['location']))
-        self._report_to_console("Going to object :", self._target_items[0]['location'])
         # TODO: Might want to go through over all target_items, for now just visit one
         self._navigator.add_waypoints([self._target_items[0]['location']])
         self._phase = Phase.FOLLOW_PATH_TO_TARGET_ITEMS
@@ -212,7 +211,6 @@ class CustomBaselineAgent(BW4TBrain):
         if len(self._target_items) == 0:
             self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
         else:
-            self._report_to_console("Grabbing item from:", len(self._collectables))
             self._phase = Phase.GET_ITEM
 
     def _getItemPhase(self) -> Action | None:
@@ -237,7 +235,6 @@ class CustomBaselineAgent(BW4TBrain):
     # ==== GOAL PHASE ====
 
     def _planPathToGoalPhase(self) -> Action | None:
-        # TODO: Ensure that they are dropped off in the correct order
         # Could possibly be done a bit more elegantly
         target_locations: list[tuple] = \
             map(lambda e: self._goal_blocks[e['goal_index']]['location'], self._is_carrying)
@@ -251,7 +248,6 @@ class CustomBaselineAgent(BW4TBrain):
 
         else:  # Drop off goal object to its correct location
             self._navigator.reset_full()
-            self._report_to_console("Going to drop-off location: ", target_locations)
             self._navigator.add_waypoints(target_locations)
             self._phase = Phase.FOLLOW_PATH_TO_GOAL
 
@@ -270,12 +266,19 @@ class CustomBaselineAgent(BW4TBrain):
 
         self._sendMessage(
             'Dropped goal block ' + str(block['visualization']) + ' at drop location ' + str(block['location']))
-        self._report_to_console("Dropping:", block)
-
-        self._phase = Phase.FOLLOW_PATH_TO_CLOSED_DOOR
 
         # TODO Should also be dependent on whether a message is sent
         self._target_goal_index += 1
+
+        match = self.__check_for_current_target_goal()
+
+        if match is not None:
+            self._target_items = [match]
+            self._report_to_console(self._target_items)
+            self._phase = Phase.PLAN_PATH_TO_TARGET_ITEMS
+        else:
+            self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
+
         return DropObject.__name__, {'object_id': block['obj_id']}
 
     # ==== MESSAGES ====
@@ -346,6 +349,7 @@ class CustomBaselineAgent(BW4TBrain):
 
         # Get all the Collect_Blocks
         self._goal_blocks = [val for key, val in temp.items() if 'Collect_Block' in key]
+        self._collectable_goal_blocks = [None] * len(self._goal_blocks)
 
     def __saveObjectsAround(self) -> None:
         objects: list[dict]|None = self._current_state.get_room_objects(self._door['room_name'])
@@ -359,23 +363,39 @@ class CustomBaselineAgent(BW4TBrain):
             if collectable not in self._collectables:
                 self._collectables.append(collectable)
 
-    def __check_collectables(self) -> list[dict]:
+    def __check_collectables(self) -> tuple[list[dict], list[dict]]:
         target_blocks: list[dict] = []
+        goal_blocks: list[dict] = []
 
         for block in self._collectables:
             for index, goal_block in enumerate(self._goal_blocks):
-                # TODO if index doesn't equal current target goal index, drop off point should be around the goal
-                if self.__compare_blocks(block, goal_block) and index == self._target_goal_index:
-                    self._report_to_console("Yes! Block matches a drop off point", block, " & ", goal_block)
+                if self.__compare_blocks(block, goal_block):
+                    if index == self._target_goal_index:
+                        target_blocks.append(block)
+                    else:
+                        # If it's not an index-match, keep it in mind for later
+                        # TODO maybe carry it close to the goal location?
+                        goal_block['collectable_match'] = block
+
                     # Not sure if this is best solution, but this way it's quite simple to go
                     # from carrying an item to matching it to a goal
                     block['goal_index'] = index
-                    target_blocks.append(block)
-                else:
-                    self._report_to_console("These do not match: ", block, " & ", goal_block)
+                    goal_blocks.append(block)
 
-        return target_blocks
+        return target_blocks, goal_blocks
 
     def __compare_blocks(self, a, b) -> bool:
         return a['visualization']['colour'] == b['visualization']['colour'] and \
                     a['visualization']['shape'] == b['visualization']['shape']
+
+    def __check_for_current_target_goal(self) -> dict|None:
+        if self._target_goal_index >= len(self._goal_blocks):
+            self._report_to_console("Already placed last block...(alledgedly)")
+            return None
+
+        current_goal = self._goal_blocks[self._target_goal_index]
+
+        if 'collectable_match' in current_goal:
+            return current_goal['collectable_match']
+        else:
+            return None
