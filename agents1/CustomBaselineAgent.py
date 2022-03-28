@@ -1,4 +1,4 @@
-from typing import Callable, Dict
+from typing import Callable, Dict, Optional
 import enum, random
 
 from matrx.actions.move_actions import MoveNorth
@@ -122,7 +122,7 @@ class CustomBaselineAgent(BW4TBrain):
         door_loc = door_loc[0], door_loc[1] + 1
 
         # Send message of current action
-        self._sendMessage('Moving to door of ' + self._door['room_name'])
+        self._sendMessage('Moving to ' + self._door['room_name'])
         self._navigator.add_waypoints([door_loc])
 
         self._phase = Phase.FOLLOW_PATH_TO_CLOSED_DOOR
@@ -139,13 +139,14 @@ class CustomBaselineAgent(BW4TBrain):
         self._phase = Phase.OPEN_DOOR
 
     def _openDoorPhase(self) -> Action | None:
+        self._sendMessage('Opening door of ' + self._door['room_name'])
         self._phase = Phase.ENTER_ROOM
 
         # Open door
         return OpenDoorAction.__name__, {'object_id': self._door['obj_id']}
 
     def _enterRoomPhase(self) -> Action | None:
-        self._sendMessage("Trying to enter room")
+        # self._sendMessage("Trying to enter room")
         self._repeat_then(1, Phase.PLAN_ROOM_CHECK)
 
         return MoveNorth.__name__, {}
@@ -162,6 +163,7 @@ class CustomBaselineAgent(BW4TBrain):
         self._phase = Phase.FOLLOW_ROOM_CHECK
 
     def _followRoomCheckPhase(self) -> Action|None:
+        self._sendMessage('Searching through ' + self._door['room_name'])
         self.__saveObjectsAround()
         self._report_to_console(self._collectables)
 
@@ -201,6 +203,7 @@ class CustomBaselineAgent(BW4TBrain):
             return
 
         self._navigator.reset_full()
+        self._sendMessage('Found goal block ' + str(self._target_items[0]['visualization']) + ' at location ' + str(self._target_items[0]['location']))
         self._report_to_console("Going to object :", self._target_items[0]['location'])
         # TODO: Might want to go through over all target_items, for now just visit one
         self._navigator.add_waypoints([self._target_items[0]['location']])
@@ -233,6 +236,10 @@ class CustomBaselineAgent(BW4TBrain):
         self._is_carrying.append(self._target_items[0])
         self._target_items.clear()
 
+        self._sendMessage(
+            'Picking up goal block ' + str(self._is_carrying[-1]['visualization']) + ' at location ' + str(self._is_carrying[-1][
+                'location']))
+
         return GrabObject.__name__, {'object_id':self._is_carrying[-1]['obj_id']}
 
     # ==== GOAL PHASE ====
@@ -248,7 +255,6 @@ class CustomBaselineAgent(BW4TBrain):
         if len(self._is_carrying) == 0:
             self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
             # TODO: Restore this by going through all the items that are not goals and removing them?
-            # return RemoveObject.__name__, {'object_id': self._is_carrying[0]['obj_id']}
             return
 
         else:  # Drop off goal object to its correct location
@@ -268,7 +274,11 @@ class CustomBaselineAgent(BW4TBrain):
             return action, {}
 
         block: dict = self._is_carrying.pop()
-        self._report_to_console("Droppinng:", block)
+        s = self._current_state.get_self()
+
+        self._sendMessage(
+            'Dropped goal block ' + str(block['visualization']) + ' at drop location ' + str(s['location']))
+        self._report_to_console("Dropping:", block)
 
         self._phase = Phase.FOLLOW_PATH_TO_CLOSED_DOOR
 
