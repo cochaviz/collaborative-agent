@@ -269,7 +269,7 @@ class CustomBaselineAgent(BW4TBrain):
         s = self._current_state.get_self()
 
         self._sendMessage(
-            'Dropped goal block ' + str(block['visualization']) + ' at drop location ' + str(s['location']))
+            'Dropped goal block ' + str(block['visualization']) + ' at drop location ' + str(block['location']))
         self._report_to_console("Dropping:", block)
 
         self._phase = Phase.FOLLOW_PATH_TO_CLOSED_DOOR
