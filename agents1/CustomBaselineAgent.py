@@ -46,6 +46,10 @@ class CustomBaselineAgent(BW4TBrain):
         self._is_carrying: list[dict] = []
         self._goal_blocks: list[dict] = []
 
+        # dropping items on the goals has to go in the right order
+        # this corresponds to a goal in the self._goal_blocks attribute
+        self._target_goal_index: int = 0
+
         self._agent_name: None | str = None
         self._current_state: State
         self._repeat_action: int = 0
@@ -184,18 +188,6 @@ class CustomBaselineAgent(BW4TBrain):
 
         self._phase = Phase.PLAN_PATH_TO_TARGET_ITEMS
 
-    def __saveObjectsAround(self) -> None:
-        objects: list[dict]|None = self._current_state.get_room_objects(self._door['room_name'])
-
-        if objects is None:
-            return
-
-        collectables: list[dict] = list(filter(lambda e: 'CollectableBlock' in e['class_inheritance'], objects))
-
-        for collectable in collectables:
-            if collectable not in self._collectables:
-                self._collectables.append(collectable)
-
     def _planPathToTargetItemsPhase(self) -> Action|None:
         if len(self._target_items) == 0:
             self._report_to_console("Can't find any collectable objects in room", self._door['room_name'])
@@ -282,6 +274,8 @@ class CustomBaselineAgent(BW4TBrain):
 
         self._phase = Phase.FOLLOW_PATH_TO_CLOSED_DOOR
 
+        # TODO Should also be dependent on whether a message is sent
+        self._target_goal_index += 1
         return DropObject.__name__, {'object_id': block['obj_id']}
 
     # ==== MESSAGES ====
@@ -353,12 +347,25 @@ class CustomBaselineAgent(BW4TBrain):
         # Get all the Collect_Blocks
         self._goal_blocks = [val for key, val in temp.items() if 'Collect_Block' in key]
 
+    def __saveObjectsAround(self) -> None:
+        objects: list[dict]|None = self._current_state.get_room_objects(self._door['room_name'])
+          # TODO if index doesn't equal current target goal index, drop off point should be around the goal
+        if objects is None:
+            return
+
+        collectables: list[dict] = list(filter(lambda e: 'CollectableBlock' in e['class_inheritance'], objects))
+
+        for collectable in collectables:
+            if collectable not in self._collectables:
+                self._collectables.append(collectable)
+
     def __check_collectables(self) -> list[dict]:
         target_blocks: list[dict] = []
 
         for block in self._collectables:
             for index, goal_block in enumerate(self._goal_blocks):
-                if self.__compare_blocks(block, goal_block):
+                # TODO if index doesn't equal current target goal index, drop off point should be around the goal
+                if self.__compare_blocks(block, goal_block) and index == self._target_goal_index:
                     self._report_to_console("Yes! Block matches a drop off point", block, " & ", goal_block)
                     # Not sure if this is best solution, but this way it's quite simple to go
                     # from carrying an item to matching it to a goal
