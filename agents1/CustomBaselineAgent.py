@@ -182,6 +182,9 @@ class CustomBaselineAgent(BW4TBrain):
         else:
             goal_target_items, all_found_goal_items = self.__check_collectables()
             for goal in all_found_goal_items:
+                del(goal['visualization']['depth'])
+                del(goal['visualization']['opacity'])
+                del(goal['visualization']['visualize_from_center'])
                 self._sendMessage('Found goal block ' + str(goal['visualization']) + ' at location ' + str(goal['location']))
 
             # This way, the StrongAgent can just pick up all goal objects it encounters
@@ -262,7 +265,6 @@ class CustomBaselineAgent(BW4TBrain):
             return action, {}
 
         block: dict = self._is_carrying.pop()
-        s = self._current_state.get_self()
 
         self._sendMessage(
             'Dropped goal block ' + str(block['visualization']) + ' at drop location ' + str(block['location']))
@@ -279,7 +281,7 @@ class CustomBaselineAgent(BW4TBrain):
         else:
             self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
 
-        return DropObject.__name__, {'object_id': block['obj_id']}
+        DropObject.__name__, {'object_id': block['obj_id']}
 
     # ==== MESSAGES ====
 
