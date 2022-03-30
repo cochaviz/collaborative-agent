@@ -7,6 +7,10 @@ class StrongAgent(CustomBaselineAgent):
     TODO Implement described behavior
     """
     def __init__(self, settings):
-        self._collectables: list[dict] = list()
-
         super().__init__(settings)
+        self._capacity = 2
+
+    # Have agent head to the open doors
+
+    # Ensure that they only pick up one of each goal items
+
