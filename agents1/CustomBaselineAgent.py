@@ -182,9 +182,6 @@ class CustomBaselineAgent(BW4TBrain):
         else:
             goal_target_items, all_found_goal_items = self.__check_collectables()
             for goal in all_found_goal_items:
-                del(goal['visualization']['depth'])
-                del(goal['visualization']['opacity'])
-                del(goal['visualization']['visualize_from_center'])
                 self._sendMessage('Found goal block ' + str(goal['visualization']) + ' at location ' + str(goal['location']))
 
             # This way, the StrongAgent can just pick up all goal objects it encounters
@@ -379,9 +376,12 @@ class CustomBaselineAgent(BW4TBrain):
                         # TODO maybe carry it close to the goal location?
                         goal_block['collectable_match'] = block
 
-                    # Not sure if this is best solution, but this way it's quite simple to go
+                    # Not sure if this is the best solution, but this way it's quite simple to go
                     # from carrying an item to matching it to a goal
                     block['goal_index'] = index
+                    del (block['visualization']['depth'])
+                    del (block['visualization']['opacity'])
+                    del (block['visualization']['visualize_from_center'])
                     goal_blocks.append(block)
 
         return target_blocks, goal_blocks
