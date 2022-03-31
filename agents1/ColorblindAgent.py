@@ -10,8 +10,7 @@ import re
 class ColorblindAgent(CustomBaselineAgent):
     """
     Cannot see colors.
-
-    TODO Implement described behavior
+    TODO: Extend to enter rooms once all of the doors are open and report found shapes
     """
 
     def __init__(self, settings):
@@ -22,8 +21,9 @@ class ColorblindAgent(CustomBaselineAgent):
         '''
 
         '''
-        self._sendMessage('Opening door of ' + self._door['room_name'])
+
         self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
+        self._sendMessage('Opening door of ' + self._door['room_name'])
 
         # Open door
         return OpenDoorAction.__name__, {'object_id': self._door['obj_id']}
@@ -43,13 +43,13 @@ class ColorblindAgent(CustomBaselineAgent):
         for mssg in self.received_messages:
             for member in teamMembers:
                 if mssg.from_id == member:
+                    self._report_to_console(mssg.content)
                     receivedMessages[member].append(mssg.content)
         return receivedMessages
 
     def __filter_messages(self, strings) -> [str]:
         color = re.compile(r"'colour':\s'#(?:[0-9a-fA-F]{3}){1,2}\b")
         for i in range(len(strings)):
-            self._report_to_console(str(strings[i].content))
             msg: str = strings[i].content
             if color.search(msg):
                 temp: str = re.sub(color, '', msg)

@@ -114,7 +114,7 @@ class CustomBaselineAgent(BW4TBrain):
 
     def _planPathToClosedDoorPhase(self) -> Action | None:
         self._navigator.reset_full()
-        all_doors = [ door for door in self._current_state.values()
+        all_doors = [door for door in self._current_state.values()
                                 if 'class_inheritance' in door and 'Door' in door['class_inheritance']]
         closed_doors = [door for door in all_doors if not door['is_open']]
 
@@ -210,12 +210,12 @@ class CustomBaselineAgent(BW4TBrain):
 
         if len(self._target_items) == 0:
             self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
-            return self._planPathToClosedDoorPhase()
+            self._planPathToClosedDoorPhase()
         else:
             for i in range(len(self._target_items)):
                 self._navigator.add_waypoints([self._target_items[i]['location']])
 
-        self._phase = Phase.FOLLOW_PATH_TO_TARGET_ITEMS
+            self._phase = Phase.FOLLOW_PATH_TO_TARGET_ITEMS
 
     def _followPathToTargetItemsPhase(self) -> Action | None:
         self._state_tracker.update(self._current_state)
@@ -236,7 +236,7 @@ class CustomBaselineAgent(BW4TBrain):
         if len(self._is_carrying) == self._capacity:
             self._phase = Phase.PLAN_PATH_TO_GOAL
         else:
-            if len(self._target_items) > 1:
+            if len(self._target_items) >= 1:
                 self._phase = Phase.FOLLOW_PATH_TO_TARGET_ITEMS
             else:
                 self._phase = Phase.ENTER_ROOM
@@ -254,6 +254,7 @@ class CustomBaselineAgent(BW4TBrain):
         else:
             self._is_carrying.append(self._target_items[0])
             self._target_items.clear()
+            self._phase = Phase.PLAN_PATH_TO_GOAL
 
         self._sendMessage(
             'Picking up goal block ' + str(self._is_carrying[-1]['visualization']) + ' at location ' + str(
