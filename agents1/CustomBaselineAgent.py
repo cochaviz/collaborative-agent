@@ -201,17 +201,9 @@ class CustomBaselineAgent(BW4TBrain):
     def _planPathToTargetItemsPhase(self) -> Action | None:
         if len(self._target_items) == 0:
             self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
-            return self._planPathToClosedDoorPhase()
-
-        self._navigator.reset_full()
-
-        if len(self._is_carrying) == 1:
-            self.__check_for_duplicates()
-
-        if len(self._target_items) == 0:
-            self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
             self._planPathToClosedDoorPhase()
         else:
+            self._navigator.reset_full()
             for i in range(len(self._target_items)):
                 self._navigator.add_waypoints([self._target_items[i]['location']])
 
@@ -235,26 +227,13 @@ class CustomBaselineAgent(BW4TBrain):
         # If capacity is reached, continue to goal otherwise continue search
         if len(self._is_carrying) == self._capacity:
             self._phase = Phase.PLAN_PATH_TO_GOAL
-        else:
-            if len(self._target_items) >= 1:
-                self._phase = Phase.FOLLOW_PATH_TO_TARGET_ITEMS
-            else:
-                self._phase = Phase.ENTER_ROOM
+
+        self._phase = Phase.PLAN_PATH_TO_GOAL
 
         assert len(self._target_items) != 0
 
-        if len(self._is_carrying) == 1:
-            is_unique: bool = self.__compare_blocks(self._is_carrying[0], self._target_items[0])
-
-            if is_unique:
-                self._is_carrying.append(self._target_items[0])
-                self._target_items.clear()
-            else:
-                self._phase = Phase.FOLLOW_PATH_TO_TARGET_ITEMS
-        else:
-            self._is_carrying.append(self._target_items[0])
-            self._target_items.clear()
-            self._phase = Phase.PLAN_PATH_TO_GOAL
+        self._is_carrying.append(self._target_items[0])
+        self._target_items.clear()
 
         self._sendMessage(
             'Picking up goal block ' + str(self._is_carrying[-1]['visualization']) + ' at location ' + str(
@@ -291,15 +270,18 @@ class CustomBaselineAgent(BW4TBrain):
         if action is not None:
             return action, {}
 
+        # Reverse the list because the agent picks up the items in order of goal
+        # and StrongAgent might be carrying 2 items
+        self._is_carrying.reverse()
         block: dict = self._is_carrying.pop()
 
         self._sendMessage(
             'Dropped goal block ' + str(block['visualization']) + ' at drop location ' + str(block['location']))
 
         # TODO Should also be dependent on whether a message is sent
-        self._target_goal_index += 1
-
         self._checkForPossibleGoalElse(Phase.PLAN_PATH_TO_CLOSED_DOOR)
+
+        # self._repeat_then(self._capacity - 1, self._checkForPossibleGoalElse(Phase.PLAN_PATH_TO_CLOSED_DOOR))
 
         return DropObject.__name__, {'object_id': block['obj_id']}
 
@@ -415,6 +397,7 @@ class CustomBaselineAgent(BW4TBrain):
                 if self.__compare_blocks(block, goal_block):
                     if index == self._target_goal_index:
                         target_blocks.append(block)
+                        self._target_goal_index += 1
                     else:
                         # If it's not an index-match, keep it in mind for later
                         # TODO: maybe carry it close to the goal location?
