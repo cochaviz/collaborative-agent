@@ -6,6 +6,7 @@ from agents1.CustomBaselineAgent import CustomBaselineAgent, Action, Phase
 
 import re
 
+
 class ColorblindAgent(CustomBaselineAgent):
     """
     Cannot see colors.
@@ -34,17 +35,24 @@ class ColorblindAgent(CustomBaselineAgent):
         receivedMessages = {}
         for member in teamMembers:
             receivedMessages[member] = []
+            self.__filter_messages(self.received_messages)
         for mssg in self.received_messages:
             for member in teamMembers:
                 if mssg.from_id == member:
-                    message = self.__filter_messages(mssg.content)
-                    receivedMessages[member].append(message)
+                    # message = self.__filter_messages(mssg.content)
+                    self._report_to_console("Updated?? " + mssg.content)
+                    receivedMessages[member].append(mssg.content)
         return receivedMessages
 
-    def __filter_messages(self, string) -> str:
-        color = re.compile("'colour':\s'#(?:[0-9a-fA-F]{3}){1,2}\b'")
-        match = re.search(color, string)
+    def __filter_messages(self, strings) -> [str]:
+        color = re.compile(r"'colour':\s'#(?:[0-9a-fA-F]{3}){1,2}\b")
+        for i in range(len(strings)):
+            self._report_to_console(str(strings[i]))
+            msg: str = strings[i]
+            if color.search(msg):
+                self._report_to_console('Matched')
+                self._report_to_console('updated: ' + re.sub(color, '', msg))
+                temp: str = re.sub(color, '', msg)
+                strings[i] = temp
 
-        self._report_to_console("Received: " + str(match))
-
-        return string
+        return strings

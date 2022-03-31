@@ -142,6 +142,8 @@ class CustomBaselineAgent(BW4TBrain):
 
         door_name, door_loc = self.__get_door_and_loc(open_doors)
 
+        self._report_to_console('Planning path to open door')
+
         # Send message of current action
         self._sendMessage('Moving to ' + door_name)
         self._navigator.add_waypoints([door_loc])
