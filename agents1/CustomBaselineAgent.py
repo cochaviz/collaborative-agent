@@ -18,9 +18,7 @@ Action = Optional[tuple[str, dict]]
 
 class Phase(enum.Enum):
     PLAN_PATH_TO_CLOSED_DOOR = 1
-    PLAN_PATH_TO_OPEN_DOOR = 12
     FOLLOW_PATH_TO_CLOSED_DOOR = 2
-    FOLLOW_PATH_TO_OPEN_DOOR = 13
     OPEN_DOOR = 3
 
     ENTER_ROOM = 4
@@ -62,9 +60,7 @@ class CustomBaselineAgent(BW4TBrain):
 
         self._switchPhase: dict[Phase, Callable[[], Action | None]] = {
             Phase.PLAN_PATH_TO_CLOSED_DOOR: self._planPathToClosedDoorPhase,
-            Phase.PLAN_PATH_TO_OPEN_DOOR: self._planPathToOpenDoorPhase,
             Phase.FOLLOW_PATH_TO_CLOSED_DOOR: self._followPathToClosedDoorPhase,
-            Phase.FOLLOW_PATH_TO_OPEN_DOOR: self._followPathToOpenDoorPhase,
             Phase.OPEN_DOOR: self._openDoorPhase,
 
             Phase.ENTER_ROOM: self._enterRoomPhase,
@@ -118,42 +114,22 @@ class CustomBaselineAgent(BW4TBrain):
 
     def _planPathToClosedDoorPhase(self) -> Action | None:
         self._navigator.reset_full()
+        all_doors = [ door for door in self._current_state.values()
+                                if 'class_inheritance' in door and 'Door' in door['class_inheritance']]
+        closed_doors = [door for door in all_doors if not door['is_open']]
 
-        closed_doors = [door for door in self._current_state.values()
-                        if 'class_inheritance' in door and 'Door' in door['class_inheritance'] and not door['is_open']]
-
-        # If all doors are open, send agent to an open door
+        # TODO maybe separate state?
         if len(closed_doors) == 0:
-            self._phase = Phase.PLAN_PATH_TO_OPEN_DOOR
+            if self._checkForPossibleGoalElse():
+                return None
+            self._door = random.choice(all_doors)
         else:
-            door_name, door_loc = self.__get_door_and_loc(closed_doors)
+            self._door = random.choice(closed_doors)
 
-            # Send message of current action
-            self._sendMessage('Moving to ' + door_name)
-            self._navigator.add_waypoints([door_loc])
+            # Randomly pick a closed door
+            door_loc = self._door['location']
 
             self._phase = Phase.FOLLOW_PATH_TO_CLOSED_DOOR
-
-    def _planPathToOpenDoorPhase(self) -> Action | None:
-        self._navigator.reset_full()
-
-        open_doors = [door for door in self._current_state.values()
-                      if 'class_inheritance' in door and 'Door' in door['class_inheritance'] and door['is_open']]
-
-        door_name, door_loc = self.__get_door_and_loc(open_doors)
-
-        self._report_to_console('Planning path to open door')
-
-        # Send message of current action
-        self._sendMessage('Moving to ' + door_name)
-        self._navigator.add_waypoints([door_loc])
-
-        self._phase = Phase.ENTER_ROOM
-
-    def _followPathToOpenDoorPhase(self) -> Action | None:
-        self._state_tracker.update(self._current_state)
-
-        self._phase = Phase.ENTER_ROOM
 
     def _followPathToClosedDoorPhase(self) -> Action | None:
         self._state_tracker.update(self._current_state)
@@ -315,16 +291,20 @@ class CustomBaselineAgent(BW4TBrain):
         # TODO Should also be dependent on whether a message is sent
         self._target_goal_index += 1
 
+        self._checkForPossibleGoalElse(Phase.PLAN_PATH_TO_CLOSED_DOOR)
+
+        return DropObject.__name__, {'object_id': block['obj_id']}
+
+    def _checkForPossibleGoalElse(self, alternative: Phase|None=None):
         match = self.__check_for_current_target_goal()
 
         if match is not None:
             self._target_items = [match]
-            self._report_to_console(self._target_items)
             self._phase = Phase.PLAN_PATH_TO_TARGET_ITEMS
         else:
-            self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
+            self._phase = alternative
 
-        return DropObject.__name__, {'object_id': block['obj_id']}
+        return match is not None and self._phase is not None
 
     # ==== MESSAGES ====
 
@@ -455,7 +435,6 @@ class CustomBaselineAgent(BW4TBrain):
 
     def __check_for_current_target_goal(self) -> dict | None:
         if self._target_goal_index >= len(self._goal_blocks):
-            self._report_to_console("Already placed last block...(alledgedly)")
             return None
 
         current_goal = self._goal_blocks[self._target_goal_index]
