@@ -126,10 +126,17 @@ class CustomBaselineAgent(BW4TBrain):
         else:
             self._door = random.choice(closed_doors)
 
-            # Randomly pick a closed door
-            door_loc = self._door['location']
+        # Randomly pick a closed door
+        door_loc = self._door['location']
 
-            self._phase = Phase.FOLLOW_PATH_TO_CLOSED_DOOR
+        # Location in front of door is south from door
+        door_loc = door_loc[0], door_loc[1] + 1
+
+        # Send message of current action
+        self._sendMessage('Moving to ' + self._door['room_name'])
+        self._navigator.add_waypoints([door_loc])
+
+        self._phase = Phase.FOLLOW_PATH_TO_CLOSED_DOOR
 
     def _followPathToClosedDoorPhase(self) -> Action | None:
         self._state_tracker.update(self._current_state)

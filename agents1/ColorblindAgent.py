@@ -35,24 +35,24 @@ class ColorblindAgent(CustomBaselineAgent):
         receivedMessages = {}
         for member in teamMembers:
             receivedMessages[member] = []
+
+        # Remove color from the ColorblindAgent's received messages
+        if len(self.received_messages) > 0:
             self.__filter_messages(self.received_messages)
+
         for mssg in self.received_messages:
             for member in teamMembers:
                 if mssg.from_id == member:
-                    # message = self.__filter_messages(mssg.content)
-                    self._report_to_console("Updated?? " + mssg.content)
                     receivedMessages[member].append(mssg.content)
         return receivedMessages
 
     def __filter_messages(self, strings) -> [str]:
         color = re.compile(r"'colour':\s'#(?:[0-9a-fA-F]{3}){1,2}\b")
         for i in range(len(strings)):
-            self._report_to_console(str(strings[i]))
-            msg: str = strings[i]
+            self._report_to_console(str(strings[i].content))
+            msg: str = strings[i].content
             if color.search(msg):
-                self._report_to_console('Matched')
-                self._report_to_console('updated: ' + re.sub(color, '', msg))
                 temp: str = re.sub(color, '', msg)
-                strings[i] = temp
+                strings[i].content = temp
 
         return strings
