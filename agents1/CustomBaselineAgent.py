@@ -112,15 +112,19 @@ class CustomBaselineAgent(BW4TBrain):
     def _planPathToClosedDoorPhase(self) -> Action | None:
         # TODO: If all doors are open then send agent elsewhere?
         self._navigator.reset_full()
+        all_doors = [ door for door in self._current_state.values()
+                                if 'class_inheritance' in door and 'Door' in door['class_inheritance']]
+        closed_doors = [door for door in all_doors if not door['is_open']]
 
-        closed_doors = [door for door in self._current_state.values()
-                       if 'class_inheritance' in door and 'Door' in door['class_inheritance'] and not door['is_open']]
-
+        # TODO maybe separate state?
         if len(closed_doors) == 0:
-            return None
+            if self._checkForPossibleGoalElse():
+                return None
+            self._door = random.choice(all_doors)
+        else:
+            self._door = random.choice(closed_doors)
 
         # Randomly pick a closed door
-        self._door = random.choice(closed_doors)
         door_loc = self._door['location']
 
         # Location in front of door is south from door
@@ -270,16 +274,20 @@ class CustomBaselineAgent(BW4TBrain):
         # TODO Should also be dependent on whether a message is sent
         self._target_goal_index += 1
 
+        self._checkForPossibleGoalElse(Phase.PLAN_PATH_TO_CLOSED_DOOR)
+
+        return DropObject.__name__, {'object_id': block['obj_id']}
+
+    def _checkForPossibleGoalElse(self, alternative: Phase|None=None):
         match = self.__check_for_current_target_goal()
 
         if match is not None:
             self._target_items = [match]
-            self._report_to_console(self._target_items)
             self._phase = Phase.PLAN_PATH_TO_TARGET_ITEMS
         else:
-            self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
+            self._phase = alternative
 
-        return DropObject.__name__, {'object_id': block['obj_id']}
+        return match is not None and self._phase is not None
 
     # ==== MESSAGES ====
 
@@ -390,7 +398,6 @@ class CustomBaselineAgent(BW4TBrain):
 
     def __check_for_current_target_goal(self) -> dict|None:
         if self._target_goal_index >= len(self._goal_blocks):
-            self._report_to_console("Already placed last block...(alledgedly)")
             return None
 
         current_goal = self._goal_blocks[self._target_goal_index]
