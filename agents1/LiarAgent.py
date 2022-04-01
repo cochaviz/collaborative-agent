@@ -56,6 +56,7 @@ class LiarAgent(CustomBaselineAgent):
         """
         Generate a random room & replace in string
         """
+        # TODO (maybe): Ensure that the chosen door isn't the door it is headed to
         all_doors = [door for door in self._current_state.values()
                      if 'class_inheritance' in door and 'Door' in door['class_inheritance']]
         door = random.choice(all_doors)
