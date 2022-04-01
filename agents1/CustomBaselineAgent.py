@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from typing import Callable, Dict, Optional
 import enum, random
 
@@ -13,7 +11,7 @@ from matrx.agents.agent_utils.state_tracker import StateTracker
 from matrx.actions.door_actions import OpenDoorAction
 from matrx.messages.message import Message
 
-Action = Optional[tuple[str, dict]]
+Action = tuple[str, dict]
 
 
 class Phase(enum.Enum):
@@ -126,9 +124,7 @@ class CustomBaselineAgent(BW4TBrain):
         else:
             self._door = random.choice(closed_doors)
 
-        # Randomly pick a closed door
         door_loc = self._door['location']
-
         # Location in front of door is south from door
         door_loc = door_loc[0], door_loc[1] + 1
 
@@ -224,10 +220,6 @@ class CustomBaselineAgent(BW4TBrain):
 
     def _getItemPhase(self) -> Action | None:
         # TODO: probably doesn't need to be its own phase
-        # If capacity is reached, continue to goal otherwise continue search
-        if len(self._is_carrying) == self._capacity:
-            self._phase = Phase.PLAN_PATH_TO_GOAL
-
         self._phase = Phase.PLAN_PATH_TO_GOAL
 
         assert len(self._target_items) != 0
@@ -247,8 +239,7 @@ class CustomBaselineAgent(BW4TBrain):
 
     def _planPathToGoalPhase(self) -> Action | None:
         # Could possibly be done a bit more elegantly
-        target_locations: list[tuple] = \
-            map(lambda e: self._goal_blocks[e['goal_index']]['location'], self._is_carrying)
+        target_locations: list[tuple] = map(lambda e: self._goal_blocks[e['goal_index']]['location'], self._is_carrying)
 
         if len(self._is_carrying) == 0:
             self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
@@ -270,19 +261,16 @@ class CustomBaselineAgent(BW4TBrain):
         if action is not None:
             return action, {}
 
-        # Reverse the list because the agent picks up the items in order of goal
-        # and StrongAgent might be carrying 2 items
-        self._is_carrying.reverse()
         block: dict = self._is_carrying.pop()
-
-        self._sendMessage(
-            'Dropped goal block ' + str(block['visualization']) + ' at drop location ' + str(block['location']))
 
         # TODO Should also be dependent on whether a message is sent
         self._checkForPossibleGoalElse(Phase.PLAN_PATH_TO_CLOSED_DOOR)
 
-        # self._repeat_then(self._capacity - 1, self._checkForPossibleGoalElse(Phase.PLAN_PATH_TO_CLOSED_DOOR))
+        loc = self._current_state[self.agent_id]['location']
+        self._sendMessage(
+            'Dropped goal block ' + str(block['visualization']) + ' at drop location ' + str(loc))
 
+        self._report_to_console(str(self._current_state[self.agent_id]['location']))
         return DropObject.__name__, {'object_id': block['obj_id']}
 
     def _checkForPossibleGoalElse(self, alternative: Phase|None=None):
@@ -366,16 +354,6 @@ class CustomBaselineAgent(BW4TBrain):
         self._goal_blocks = [val for key, val in temp.items() if 'Collect_Block' in key]
         self._collectable_goal_blocks = [None] * len(self._goal_blocks)
 
-    def __get_door_and_loc(self, doors) -> tuple[str, [int, int]]:
-        # Randomly pick a door
-        self._door = random.choice(doors)
-        door_loc = self._door['location']
-
-        # Location in front of door is south from door
-        door_loc = door_loc[0], door_loc[1] + 1
-
-        return self._door['room_name'], door_loc
-
     def __saveObjectsAround(self) -> None:
         objects: list[dict] | None = self._current_state.get_room_objects(self._door['room_name'])
         # TODO: if index doesn't equal current target goal index, drop off point should be around the goal
@@ -387,6 +365,12 @@ class CustomBaselineAgent(BW4TBrain):
         for collectable in collectables:
             if collectable not in self._collectables:
                 self._collectables.append(collectable)
+
+    def __get_target_loc(self) -> list[str]:
+        block = self._is_carrying[0]
+        for index, goal_block in enumerate(self._goal_blocks):
+            if self.__compare_blocks(block, goal_block):
+                return goal_block['location']
 
     def __check_collectables(self) -> tuple[list[dict], list[dict]]:
         target_blocks: list[dict] = []
