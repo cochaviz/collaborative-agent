@@ -59,6 +59,7 @@ class CustomBaselineAgent(BW4TBrain):
         # is true when acting on second-hand information
         self._acting_on_trust: bool = False
         self._trusting_agent: str = ""
+        self._trustBeliefs: None|dict = None
 
         self._memory: dict[Phase, dict] = {
             Phase.PLAN_PATH_TO_CLOSED_DOOR: {},
@@ -126,7 +127,7 @@ class CustomBaselineAgent(BW4TBrain):
         received_messages = self._processMessages(self._teamMembers)
 
         # Update trust beliefs for team members
-        self._trustBlief(self._teamMembers, received_messages)
+        self._updateTrustBelief(self._teamMembers, received_messages)
         self._memorize(self._teamMembers, received_messages)
 
         while True:
@@ -399,20 +400,14 @@ class CustomBaselineAgent(BW4TBrain):
                                 # drop everything we're doing now if it we know one exists
                                 return self._dropBlockIfCarrying()
 
-    def _trustBlief(self, member, received) -> dict:
-        '''
-        Baseline implementation of a trust belief. Creates a dictionary with trust belief scores for each team member, for example based on the received messages.
-        '''
-        # You can change the default value to your preference
-        default = 0.5
-        # TODO Should be done upon init and be a property
-        trustBeliefs = {}
-        for member in received.keys():
-            trustBeliefs[member] = default
-        for member in received.keys():
+    def _updateTrustBelief(self, members, received) -> dict:
+        if self._trustBeliefs is None:
+            self.__initTrust(members)
+
+        for member in members:
             for message in received[member]:
                 if 'Found' in message and 'colour' not in message:
-                    trustBeliefs[member] -= 0.1
+                    self._trustBeliefs[member] -= 0.1
                     break
                 if 'Opening' in message:
                     room_name = message.split()[-1]
@@ -421,10 +416,15 @@ class CustomBaselineAgent(BW4TBrain):
                     closed_rooms = [door['room_name'] for door in all_doors if not door['is_open']]
 
                     if room_name in closed_rooms:
-                        trustBeliefs[member] -=0.1
+                        self._trustBeliefs[member] -=0.1
 
+        self._report_to_console(self._trustBeliefs)
 
-        return trustBeliefs
+    def __initTrust(self, members, default=.5):
+        self._trustBeliefs = {}
+
+        for member in members:
+            self._trustBeliefs[member] = default
 
     # ==== UTILS ====
 
