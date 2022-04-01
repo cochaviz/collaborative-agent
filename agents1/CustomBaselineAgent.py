@@ -127,6 +127,7 @@ class CustomBaselineAgent(BW4TBrain):
         self._memorize(self._teamMembers, received_messages)
 
         while True:
+            assert self._phase is not None
             action_and_subject = self._switchPhase[self._phase]()
 
             if action_and_subject is not None and action_and_subject[0] is not None:
@@ -143,7 +144,7 @@ class CustomBaselineAgent(BW4TBrain):
 
         # TODO maybe separate state?
         if len(closed_doors) == 0:
-            if self._checkForPossibleGoalElse():
+            if self._checkForPossibleGoal():
                 return None
             self._door = random.choice(all_doors)
         else:
@@ -304,29 +305,33 @@ class CustomBaselineAgent(BW4TBrain):
         if action is not None:
             return action, {}
 
+        self._target_goal_index += 1
+        return self._dropBlockIfCarrying()
+
+    def _dropBlockIfCarrying(self) -> Action | None:
+        if len(self._is_carrying) == 0 :
+           return None
+
         block: dict = self._is_carrying.pop()
-        s = self._current_state.get_self()
+        current_location: tuple = self._current_state[self.agent_id]['location']
 
         self._sendMessage(
-            'Dropped goal block ' + str(block['visualization']) + ' at drop location ' + str(block['location']))
+            'Dropped goal block ' + str(block['visualization']) + ' at drop location ' + str(current_location))
 
-        # TODO Should also be dependent on whether a message is sent
-        self._target_goal_index += 1
-
-        self._checkForPossibleGoalElse(Phase.PLAN_PATH_TO_CLOSED_DOOR)
+        if not self._checkForPossibleGoal():
+            self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
 
         return DropObject.__name__, {'object_id': block['obj_id']}
 
-    def _checkForPossibleGoalElse(self, alternative: Phase|None=None):
+
+    def _checkForPossibleGoal(self, set_target_and_phase:bool=True) -> bool:
         match = self.__check_for_current_target_goal()
 
         if match is not None:
             self._target_items = [match]
             self._phase = Phase.PLAN_PATH_TO_TARGET_ITEMS
-        else:
-            self._phase = alternative
 
-        return match is not None and self._phase is not None
+        return match is not None
 
     # ==== MESSAGES ====
 
@@ -362,6 +367,19 @@ class CustomBaselineAgent(BW4TBrain):
                     self._collectables = [item]
                     self.__check_collectables()
                     self._collectables = old_collectables
+                if 'Dropped' in message:
+                    item = self.__object_from_message(message)
+                    current_goal_block = self._goal_blocks[self._target_goal_index]
+
+                    # If the item matches the current goal and the drop location matches the target location
+                    if self.__compare_blocks(item, current_goal_block) and item['location'] == current_goal_block['location']:
+                        # set next goal as target
+                        self._target_goal_index += 1
+                        # and look for collectable goal item
+                        if self._checkForPossibleGoal():
+                            # drop everything we're doing now if it we know one exists
+                            # TODO might wanna literally drop an object if we're already carrying one?
+                            return self._dropBlockIfCarrying()
 
     def _trustBlief(self, member, received) -> dict:
         '''
@@ -386,6 +404,8 @@ class CustomBaselineAgent(BW4TBrain):
 
                     if room_name in closed_rooms:
                         trustBeliefs[member] -=0.1
+                        self._report_to_console("trust", trustBeliefs)
+
 
         return trustBeliefs
 
