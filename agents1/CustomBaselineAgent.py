@@ -125,6 +125,7 @@ class CustomBaselineAgent(BW4TBrain):
             self._door = random.choice(closed_doors)
 
         door_loc = self._door['location']
+        self._report_to_console("DOOR: " + str(door_loc))
         # Location in front of door is south from door
         door_loc = door_loc[0], door_loc[1] + 1
 
@@ -187,9 +188,7 @@ class CustomBaselineAgent(BW4TBrain):
                     'Found goal block ' + str(goal['visualization']) + ' at location ' + str(goal['location'])
                 )
 
-            # This way, the StrongAgent can just pick up all goal objects it encounters
             self._target_items = goal_target_items[0:self._capacity]
-            self._report_to_console("Target items: " + str(len(goal_target_items)))
             self._collectables.clear()
 
         self._phase = Phase.PLAN_PATH_TO_TARGET_ITEMS
@@ -270,7 +269,6 @@ class CustomBaselineAgent(BW4TBrain):
         self._sendMessage(
             'Dropped goal block ' + str(block['visualization']) + ' at drop location ' + str(loc))
 
-        self._report_to_console(str(self._current_state[self.agent_id]['location']))
         return DropObject.__name__, {'object_id': block['obj_id']}
 
     def _checkForPossibleGoalElse(self, alternative: Phase|None=None):
@@ -365,12 +363,6 @@ class CustomBaselineAgent(BW4TBrain):
         for collectable in collectables:
             if collectable not in self._collectables:
                 self._collectables.append(collectable)
-
-    def __get_target_loc(self) -> list[str]:
-        block = self._is_carrying[0]
-        for index, goal_block in enumerate(self._goal_blocks):
-            if self.__compare_blocks(block, goal_block):
-                return goal_block['location']
 
     def __check_collectables(self) -> tuple[list[dict], list[dict]]:
         target_blocks: list[dict] = []

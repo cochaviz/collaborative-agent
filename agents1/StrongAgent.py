@@ -15,7 +15,7 @@ class StrongAgent(CustomBaselineAgent):
     def _getItemPhase(self) -> Action | None:
         if len(self._is_carrying) + 1 == self._capacity:
             self._phase = Phase.PLAN_PATH_TO_GOAL
-        elif len(self._goal_blocks) == self._target_goal_index:
+        elif (len(self._goal_blocks) - 1) == self._target_goal_index:
             self._phase = Phase.PLAN_PATH_TO_GOAL
         else:
             if len(self._target_items) > 1:
@@ -26,6 +26,7 @@ class StrongAgent(CustomBaselineAgent):
         assert len(self._target_items) != 0
 
         self._is_carrying.append(self._target_items[0])
+        self._target_goal_index += 1
         self._target_items.clear()
 
         self._sendMessage(
@@ -94,6 +95,31 @@ class StrongAgent(CustomBaselineAgent):
         for index, goal_block in enumerate(self._goal_blocks):
             if self.__compare_blocks(block, goal_block):
                 return goal_block['location']
+
+    def __check_collectables(self) -> tuple[list[dict], list[dict]]:
+        target_blocks: list[dict] = []
+        goal_blocks: list[dict] = []
+
+        for block in self._collectables:
+            for index, goal_block in enumerate(self._goal_blocks):
+                if self.__compare_blocks(block, goal_block):
+                    if index == self._target_goal_index:
+                        target_blocks.append(block)
+                        self._target_goal_index += 1
+                    else:
+                        # If it's not an index-match, keep it in mind for later
+                        # TODO: maybe carry it close to the goal location?
+                        goal_block['collectable_match'] = block
+
+                    # Not sure if this is the best solution, but this way it's quite simple to go
+                    # from carrying an item to matching it to a goal
+                    block['goal_index'] = index
+                    del (block['visualization']['depth'])
+                    del (block['visualization']['opacity'])
+                    del (block['visualization']['visualize_from_center'])
+                    goal_blocks.append(block)
+
+        return target_blocks, goal_blocks
     # Have agent head to the open doors
 
     # Ensure that they only pick up one of each goal items

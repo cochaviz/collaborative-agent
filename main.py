@@ -1,4 +1,5 @@
 from agents1.CustomBaselineAgent import CustomBaselineAgent
+from agents1.LiarAgent import LiarAgent
 from agents1.StrongAgent import StrongAgent
 from agents1.ColorblindAgent import ColorblindAgent
 from bw4t.BW4TWorld import BW4TWorld
@@ -13,8 +14,10 @@ press the start button in god mode to start the session.
 
 if __name__ == "__main__":
     agents = [
-        {'name':'agent1', 'botclass': CustomBaselineAgent, 'settings':{}},
-        {'name':'agent2', 'botclass': ColorblindAgent, 'settings':{}},
+        #{'name':'agent1', 'botclass': StrongAgent, 'settings':{}},
+        # {'name':'agent3', 'botclass': CustomBaselineAgent, 'settings':{}},
+        #{'name':'agent2', 'botclass': ColorblindAgent, 'settings':{}},
+        {'name': 'agent4', 'botclass': LiarAgent, 'settings': {}},
         {'name':'human', 'botclass': Human, 'settings':{}}
         ]
 
