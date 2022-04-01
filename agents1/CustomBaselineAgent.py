@@ -139,7 +139,6 @@ class CustomBaselineAgent(BW4TBrain):
     # ==== DOOR PHASE ====
 
     def _planPathToClosedDoorPhase(self) -> Action | None:
-        # TODO: If all doors are open then send agent elsewhere?
         self._navigator.reset_full()
         all_doors = [ door for door in self._current_state.values()
                                 if 'class_inheritance' in door and 'Door' in door['class_inheritance']]
@@ -228,7 +227,7 @@ class CustomBaselineAgent(BW4TBrain):
             return
 
         self._navigator.reset_full()
-        # TODO: Might want to go through over all target_items, for now just visit one
+        # TODO Might want to go through over all target_items, for now just visit one
         self._navigator.add_waypoints([self._target_items[0]['location']])
         self._phase = Phase.FOLLOW_PATH_TO_TARGET_ITEMS
 
@@ -289,7 +288,6 @@ class CustomBaselineAgent(BW4TBrain):
         # goal object, then we remove it
         if len(self._is_carrying) == 0:
             self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
-            # TODO: Restore this by going through all the items that are not goals and removing them?
             return
 
         else:  # Drop off goal object to its correct location
@@ -298,8 +296,6 @@ class CustomBaselineAgent(BW4TBrain):
             self._phase = Phase.FOLLOW_PATH_TO_GOAL
 
     def _followPathToGoalPhase(self) -> Action | None:
-        # TODO: Check if goal object has already been placed,
-        #  there are multiple of the same shapes that match the goals
         self._state_tracker.update(self._current_state)
 
         action = self._navigator.get_move_action(self._state_tracker)
@@ -401,7 +397,6 @@ class CustomBaselineAgent(BW4TBrain):
                             # and look for collectable goal item
                             if self._checkForPossibleGoal():
                                 # drop everything we're doing now if it we know one exists
-                                # TODO might wanna literally drop an object if we're already carrying one?
                                 return self._dropBlockIfCarrying()
 
     def _trustBlief(self, member, received) -> dict:
@@ -462,7 +457,6 @@ class CustomBaselineAgent(BW4TBrain):
 
     def __saveObjectsAround(self) -> None:
         objects: list[dict]|None = self._current_state.get_room_objects(self._door['room_name'])
-          # TODO if index doesn't equal current target goal index, drop off point should be around the goal
         if objects is None:
             return
 
