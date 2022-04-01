@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from matrx.actions import GrabObject, DropObject, GrabObjectResult
 
 from agents1.CustomBaselineAgent import CustomBaselineAgent, Action, Phase
@@ -26,7 +28,7 @@ class StrongAgent(CustomBaselineAgent):
         assert len(self._target_items) != 0
 
         self._is_carrying.append(self._target_items[0])
-        self._target_goal_index += 1
+        # self._target_goal_index += 1
         self._target_items.clear()
 
         self._sendMessage(
@@ -34,9 +36,9 @@ class StrongAgent(CustomBaselineAgent):
                 self._is_carrying[-1]['location'])
         )
 
-        temp: int = -1
-        if len(self._is_carrying) > 1:
-            temp = self._target_goal_index - 1
+        temp: int = 0 if len(self._is_carrying) == 1 else 1
+
+        self._report_to_console("Temp: " + str(temp))
 
         return GrabObject.__name__, {'object_id': self._is_carrying[temp]['obj_id']}
 
