@@ -5,8 +5,8 @@ import random
 import re
 from os.path import exists
 
-from matrx.actions.move_actions import MoveNorth
-from matrx.actions.object_actions import GrabObject, DropObject, RemoveObject
+from matrx.actions.move_actions import MoveNorth, MoveWest
+from matrx.actions.object_actions import GrabObject, DropObject, RemoveObject, GrabObjectResult
 
 from bw4t.BW4TBrain import BW4TBrain
 from matrx.agents.agent_utils.state import State
@@ -32,6 +32,7 @@ class Phase(enum.Enum):
 
     PLAN_PATH_TO_GOAL = 8
     FOLLOW_PATH_TO_GOAL = 9
+    CANCEL_GOAL = 12
 
 class CustomBaselineAgent(BW4TBrain):
     """
@@ -47,6 +48,7 @@ class CustomBaselineAgent(BW4TBrain):
         self._collectables: list[dict] = []
         self._target_items: list[dict] = []
         self._is_carrying: list[dict] = []
+        self._last_grab_action_succesful: bool = True
 
         self._goal_blocks: list[dict] = []
 
@@ -94,6 +96,7 @@ class CustomBaselineAgent(BW4TBrain):
 
             Phase.PLAN_PATH_TO_GOAL: self._planPathToGoalPhase,
             Phase.FOLLOW_PATH_TO_GOAL: self._followPathToGoalPhase,
+            Phase.CANCEL_GOAL: self._cancelGoalPhase,
         }
 
     def initialize(self) -> None:
@@ -252,7 +255,6 @@ class CustomBaselineAgent(BW4TBrain):
 
         # if target item is only a hint by another agent
         if not 'obj_id' in self._target_items[0]:
-            self._report_to_console("cannot find object id")
             close_items = self._current_state.get_objects_in_area(top_left=self._current_state[self.agent_id]['location'], width=1, height=1)
             close_collectables = self.__filter_collectables(close_items)
 
@@ -305,8 +307,28 @@ class CustomBaselineAgent(BW4TBrain):
         if action is not None:
             return action, {}
 
-        self._target_goal_index += 1
-        return self._dropBlockIfCarrying()
+        if self._verify_goal_index():
+            # TODO Also update trust
+            self._target_goal_index += 1
+            return self._dropBlockIfCarrying()
+
+        self._target_goal_index -= 1
+        self._phase = Phase.CANCEL_GOAL
+
+    def _cancelGoalPhase(self) -> Action | None:
+        if self._current_state[self.agent_id]['location'] != self._goal_blocks[self._target_goal_index]['location']:
+            self._phase = Phase.OPEN_DOOR
+            return self._dropBlockIfCarrying()
+
+        return MoveWest.__name__, {}
+
+    def _verify_goal_index(self) -> bool:
+        current_location = self._current_state[self.agent_id]['location']
+        # south of us should be a collectable
+        current_location = current_location[0], current_location[1] + 1
+        objects = self._current_state.get_objects_in_area(top_left=current_location, width=1, height=1)
+
+        return self._target_goal_index == 0 or len(self.__filter_collectables(objects)) > 0
 
     def _dropBlockIfCarrying(self) -> Action | None:
         if len(self._is_carrying) == 0 :
@@ -361,25 +383,26 @@ class CustomBaselineAgent(BW4TBrain):
     def _memorize(self, member, received) -> None:
         for member in received.keys():
             for message in received[member]:
-                if 'Found' in message:
-                    item = self.__object_from_message(message)
-                    old_collectables = self._collectables
-                    self._collectables = [item]
-                    self.__check_collectables()
-                    self._collectables = old_collectables
-                if 'Dropped' in message:
-                    item = self.__object_from_message(message)
-                    current_goal_block = self._goal_blocks[self._target_goal_index]
-
-                    # If the item matches the current goal and the drop location matches the target location
-                    if self.__compare_blocks(item, current_goal_block) and item['location'] == current_goal_block['location']:
-                        # set next goal as target
-                        self._target_goal_index += 1
-                        # and look for collectable goal item
-                        if self._checkForPossibleGoal():
-                            # drop everything we're doing now if it we know one exists
-                            # TODO might wanna literally drop an object if we're already carrying one?
-                            return self._dropBlockIfCarrying()
+                if member != self.agent_id:
+                    # TODO if picking up object, remove from considered collectable goals
+                    if 'Found' in message:
+                        item = self.__object_from_message(message)
+                        old_collectables = self._collectables
+                        self._collectables = [item]
+                        self.__check_collectables()
+                        self._collectables = old_collectables
+                    if 'Dropped' in message:
+                        item = self.__object_from_message(message)
+                        current_goal_block = self._goal_blocks[self._target_goal_index]
+                        # If the item matches the current goal and the drop location matches the target location
+                        if self.__compare_blocks(item, current_goal_block) and item['location'] == current_goal_block['location']:
+                            # set next goal as target
+                            self._target_goal_index += 1
+                            # and look for collectable goal item
+                            if self._checkForPossibleGoal():
+                                # drop everything we're doing now if it we know one exists
+                                # TODO might wanna literally drop an object if we're already carrying one?
+                                return self._dropBlockIfCarrying()
 
     def _trustBlief(self, member, received) -> dict:
         '''
@@ -404,7 +427,6 @@ class CustomBaselineAgent(BW4TBrain):
 
                     if room_name in closed_rooms:
                         trustBeliefs[member] -=0.1
-                        self._report_to_console("trust", trustBeliefs)
 
 
         return trustBeliefs
@@ -462,7 +484,11 @@ class CustomBaselineAgent(BW4TBrain):
                     else:
                         # If it's not an index-match, keep it in mind for later
                         # TODO maybe carry it close to the goal location?
-                        goal_block['collectable_match'] = block
+                        if 'collectable_match' in goal_block:
+                            goal_block['collectable_match'] = \
+                                self.__return_closest_to(goal_block['collectable_match'], block, goal_block['location'])
+                        else:
+                            goal_block['collectable_match'] = block
 
                     # Not sure if this is best solution, but this way it's quite simple to go
                     # from carrying an item to matching it to a goal
@@ -501,5 +527,15 @@ class CustomBaselineAgent(BW4TBrain):
                 },
             }
 
+    def __return_closest_to(self, a:dict, b:dict, location:tuple) -> dict:
+        if self.__distance(a['location'], location) < self.__distance(b['location'], location):
+            return a
+        return b
+
     def __filter_collectables(self, objects):
         return list(filter(lambda e: 'CollectableBlock' in e['class_inheritance'], objects))
+
+    def __distance(self, a:tuple, b:tuple) -> int:
+        x_a, y_a = a
+        x_b, y_b = b
+        return abs(x_a - x_b) + abs(y_a - y_b)
