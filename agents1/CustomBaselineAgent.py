@@ -1,5 +1,9 @@
 from typing import Callable, Dict, Optional
 import enum, random
+import json
+import random
+import re
+from os.path import exists
 
 from matrx.actions.move_actions import MoveNorth
 from matrx.actions.object_actions import GrabObject, DropObject, RemoveObject
@@ -12,7 +16,6 @@ from matrx.actions.door_actions import OpenDoorAction
 from matrx.messages.message import Message
 
 Action = tuple[str, dict] | None
-
 
 class Phase(enum.Enum):
     PLAN_PATH_TO_CLOSED_DOOR=1,
@@ -50,6 +53,27 @@ class CustomBaselineAgent(BW4TBrain):
         # dropping items on the goals has to go in the right order
         # this corresponds to a goal in the self._goal_blocks attribute
         self._target_goal_index: int = 0
+
+        # is true when acting on second-hand information
+        self._acting_on_trust: bool = False
+        self._trusting_agent: str = ""
+
+        self._memory: dict[Phase, dict] = {
+            Phase.PLAN_PATH_TO_CLOSED_DOOR: {},
+            Phase.FOLLOW_PATH_TO_CLOSED_DOOR: {},
+            Phase.OPEN_DOOR: {},
+
+            Phase.ENTER_ROOM: {},
+            Phase.PLAN_ROOM_CHECK: {},
+            Phase.FOLLOW_ROOM_CHECK: {},
+
+            Phase.PLAN_PATH_TO_TARGET_ITEMS: {},
+            Phase.FOLLOW_PATH_TO_TARGET_ITEMS: {},
+            Phase.GET_ITEM: {},
+
+            Phase.PLAN_PATH_TO_GOAL: {},
+            Phase.FOLLOW_PATH_TO_GOAL: {},
+        }
 
         self._agent_name: None | str = None
         self._current_state: State
@@ -100,6 +124,7 @@ class CustomBaselineAgent(BW4TBrain):
 
         # Update trust beliefs for team members
         self._trustBlief(self._teamMembers, received_messages)
+        self._memorize(self._teamMembers, received_messages)
 
         while True:
             action_and_subject = self._switchPhase[self._phase]()
@@ -155,7 +180,6 @@ class CustomBaselineAgent(BW4TBrain):
         return OpenDoorAction.__name__, {'object_id': self._door['obj_id']}
 
     def _enterRoomPhase(self) -> Action | None:
-        # self._sendMessage("Trying to enter room")
         self._repeat_then(1, Phase.PLAN_ROOM_CHECK)
 
         return MoveNorth.__name__, {}
@@ -225,7 +249,21 @@ class CustomBaselineAgent(BW4TBrain):
 
         self._phase = Phase.PLAN_PATH_TO_GOAL
 
-        assert len(self._target_items) != 0
+        # if target item is only a hint by another agent
+        if not 'obj_id' in self._target_items[0]:
+            self._report_to_console("cannot find object id")
+            close_items = self._current_state.get_objects_in_area(top_left=self._current_state[self.agent_id]['location'], width=1, height=1)
+            close_collectables = self.__filter_collectables(close_items)
+
+            # check if the item under you matches the description
+            if len(close_collectables) > 0 and self.__compare_blocks(self._target_items[0], close_collectables[0]):
+                self._target_items[0]['obj_id'] = close_collectables[0]['obj_id']
+            else:
+                # if not the case, remove current item as considerable goal collectable match for goal object
+                self._goal_blocks[self._target_items[0]['goal_index']].pop('collectable_match')
+                self._target_items.clear()
+                self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
+                return
 
         self._is_carrying.append(self._target_items[0])
         self._target_items.clear()
@@ -234,6 +272,7 @@ class CustomBaselineAgent(BW4TBrain):
             'Picking up goal block ' + str(self._is_carrying[-1]['visualization']) + ' at location ' + str(self._is_carrying[-1][
                 'location']))
 
+        # TODO Check if successfull
         return GrabObject.__name__, {'object_id':self._is_carrying[-1]['obj_id']}
 
     # ==== GOAL PHASE ====
@@ -314,12 +353,23 @@ class CustomBaselineAgent(BW4TBrain):
 
     # ==== TRUST ====
 
+    def _memorize(self, member, received) -> None:
+        for member in received.keys():
+            for message in received[member]:
+                if 'Found' in message:
+                    item = self.__object_from_message(message)
+                    old_collectables = self._collectables
+                    self._collectables = [item]
+                    self.__check_collectables()
+                    self._collectables = old_collectables
+
     def _trustBlief(self, member, received) -> dict:
         '''
         Baseline implementation of a trust belief. Creates a dictionary with trust belief scores for each team member, for example based on the received messages.
         '''
         # You can change the default value to your preference
         default = 0.5
+        # TODO Should be done upon init and be a property
         trustBeliefs = {}
         for member in received.keys():
             trustBeliefs[member] = default
@@ -328,6 +378,15 @@ class CustomBaselineAgent(BW4TBrain):
                 if 'Found' in message and 'colour' not in message:
                     trustBeliefs[member] -= 0.1
                     break
+                if 'Opening' in message:
+                    room_name = message.split()[-1]
+                    all_doors = [ door for door in self._current_state.values()
+                                            if 'class_inheritance' in door and 'Door' in door['class_inheritance']]
+                    closed_rooms = [door['room_name'] for door in all_doors if not door['is_open']]
+
+                    if room_name in closed_rooms:
+                        trustBeliefs[member] -=0.1
+
         return trustBeliefs
 
     # ==== UTILS ====
@@ -365,7 +424,7 @@ class CustomBaselineAgent(BW4TBrain):
         if objects is None:
             return
 
-        collectables: list[dict] = list(filter(lambda e: 'CollectableBlock' in e['class_inheritance'], objects))
+        collectables: list[dict] = self.__filter_collectables(objects)
 
         for collectable in collectables:
             if collectable not in self._collectables:
@@ -406,3 +465,21 @@ class CustomBaselineAgent(BW4TBrain):
             return current_goal['collectable_match']
         else:
             return None
+
+    def __object_from_message(self, message):
+        location_string = str(re.findall(r'\(.*?\)', message)[0][1:-1])
+        location = tuple(map(lambda e: int(e), location_string.split(", ")))
+        found_object = re.findall(r'\{.*?\}', message)[0]
+        colour = re.findall("'colour': '#\w+'", found_object)[0].split(": ")[-1][1:-1]
+        shape = int(re.findall("\'shape\': \d+", found_object)[0].split(": ")[-1])
+
+        return {
+            "location": location,
+            "visualization": {
+                "colour": colour,
+                "shape": shape
+                },
+            }
+
+    def __filter_collectables(self, objects):
+        return list(filter(lambda e: 'CollectableBlock' in e['class_inheritance'], objects))
