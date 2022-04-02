@@ -11,7 +11,6 @@ class LiarAgent(CustomBaselineAgent):
     Information sharing does not always match actions and/or observations. For example, the agent can
     lie about which area an agent is moving to or where it found a goal block. Implement this agent to lie
     about actions and/or observations 80% of the time.
-
     """
 
     def __init__(self, settings):
@@ -26,8 +25,6 @@ class LiarAgent(CustomBaselineAgent):
             temp1 = self.__replace_color(mssg)
             temp2 = self.__replace_room(temp1)
             temp3 = self.__replace_location(temp2)
-
-            self._report_to_console(temp3)
 
             msg = Message(content=temp3, from_id=self._agent_name)
 
@@ -73,7 +70,7 @@ class LiarAgent(CustomBaselineAgent):
         door = random.choice(all_doors)
         return str(door['location'])
 
-    def __replace_color(self, msg) -> str:
+    def __replace_color(self, msg:str) -> str:
         """
         Check if the message contains a color
         """
@@ -85,7 +82,7 @@ class LiarAgent(CustomBaselineAgent):
         else:
             return msg
 
-    def __replace_room(self, msg) -> bool:
+    def __replace_room(self, msg:str) -> str:
         """
         Check if the message contains a room name
         """
@@ -97,7 +94,7 @@ class LiarAgent(CustomBaselineAgent):
         else:
             return msg
 
-    def __replace_location(self, msg) -> bool:
+    def __replace_location(self, msg:str) -> str:
         """
         Check if the message contains a location
         """
