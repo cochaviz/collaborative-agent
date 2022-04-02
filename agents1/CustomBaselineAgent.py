@@ -91,7 +91,7 @@ class CustomBaselineAgent(BW4TBrain):
         self._agent_name = self._current_state[self.agent_id]['obj_id']
 
         if len(self._goal_blocks) == 0:
-            self.__init_goal_targets()
+            self._init_goal_targets()
 
         # Add team members
         for member in self._current_state['World']['team_members']:
@@ -127,7 +127,6 @@ class CustomBaselineAgent(BW4TBrain):
             self._door = random.choice(closed_doors)
 
         door_loc = self._door['location']
-        self._report_to_console("DOOR: " + str(door_loc))
         # Location in front of door is south from door
         door_loc = door_loc[0], door_loc[1] + 1
 
@@ -184,7 +183,7 @@ class CustomBaselineAgent(BW4TBrain):
         if len(self._collectables) == 0:
             self._target_items.clear()
         else:
-            goal_target_items, all_found_goal_items = self.__check_collectables()
+            goal_target_items, all_found_goal_items = self._check_collectables()
             for goal in all_found_goal_items:
                 self._sendMessage(
                     'Found goal block ' + str(goal['visualization']) + ' at location ' + str(goal['location'])
@@ -274,7 +273,7 @@ class CustomBaselineAgent(BW4TBrain):
         return DropObject.__name__, {'object_id': block['obj_id']}
 
     def _checkForPossibleGoalElse(self, alternative: Phase|None=None):
-        match = self.__check_for_current_target_goal()
+        match = self._check_for_current_target_goal()
 
         if match is not None:
             self._target_items = [match]
@@ -347,14 +346,14 @@ class CustomBaselineAgent(BW4TBrain):
         else:
             return 'not a shape'
 
-    def __init_goal_targets(self) -> None:
+    def _init_goal_targets(self) -> None:
         temp = self._current_state.as_dict()
 
         # Get all the Collect_Blocks
         self._goal_blocks = [val for key, val in temp.items() if 'Collect_Block' in key]
         self._collectable_goal_blocks = [None] * len(self._goal_blocks)
 
-    def __saveObjectsAround(self) -> None:
+    def _saveObjectsAround(self) -> None:
         objects: list[dict] | None = self._current_state.get_room_objects(self._door['room_name'])
         # TODO: if index doesn't equal current target goal index, drop off point should be around the goal
         if objects is None:
@@ -366,13 +365,13 @@ class CustomBaselineAgent(BW4TBrain):
             if collectable not in self._collectables:
                 self._collectables.append(collectable)
 
-    def __check_collectables(self) -> tuple[list[dict], list[dict]]:
+    def _check_collectables(self) -> tuple[list[dict], list[dict]]:
         target_blocks: list[dict] = []
         goal_blocks: list[dict] = []
 
         for block in self._collectables:
             for index, goal_block in enumerate(self._goal_blocks):
-                if self.__compare_blocks(block, goal_block):
+                if self._compare_blocks(block, goal_block):
                     if index == self._target_goal_index:
                         target_blocks.append(block)
                         self._target_goal_index += 1
@@ -391,18 +390,18 @@ class CustomBaselineAgent(BW4TBrain):
 
         return target_blocks, goal_blocks
 
-    def __check_for_duplicates(self) -> None:
+    def _check_for_duplicates(self) -> None:
         for i in range(len(self._target_items)):
             carrying = self._is_carrying
             for j in range(len(carrying)):
                 if self.__compare_blocks(self._target_items[i], carrying[j]):
                     del (self._target_items[i])
 
-    def __compare_blocks(self, a, b) -> bool:
+    def _compare_blocks(self, a, b) -> bool:
         return a['visualization']['colour'] == b['visualization']['colour'] and \
                a['visualization']['shape'] == b['visualization']['shape']
 
-    def __check_for_current_target_goal(self) -> dict | None:
+    def _check_for_current_target_goal(self) -> dict | None:
         if self._target_goal_index >= len(self._goal_blocks):
             return None
 

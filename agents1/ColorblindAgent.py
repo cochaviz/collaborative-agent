@@ -10,7 +10,6 @@ import re
 class ColorblindAgent(CustomBaselineAgent):
     """
     Cannot see colors.
-    TODO: Extend to enter rooms once all of the doors are open and report found shapes
     """
 
     def __init__(self, settings):
