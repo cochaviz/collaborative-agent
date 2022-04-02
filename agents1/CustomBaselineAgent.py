@@ -299,6 +299,7 @@ class CustomBaselineAgent(BW4TBrain):
 
         if self._verify_goal_index():
             # TODO Also update trust
+            self._target_goal_index += 1
             return self._dropBlockIfCarrying()
 
         self._target_goal_index -= 1
@@ -325,7 +326,6 @@ class CustomBaselineAgent(BW4TBrain):
 
         block: dict = self._is_carrying.pop()
         current_location: tuple = self._current_state[self.agent_id]['location']
-        self._target_goal_index += 1
 
         self._sendMessage(
             'Dropped goal block ' + str(block['visualization']) + ' at drop location ' + str(current_location))
