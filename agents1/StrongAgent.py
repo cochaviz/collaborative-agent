@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from matrx.actions import GrabObject, DropObject, GrabObjectResult, DropObjectResult
 
 from agents1.CustomBaselineAgent import CustomBaselineAgent, Action, Phase
@@ -59,6 +57,7 @@ class StrongAgent(CustomBaselineAgent):
         # TODO: Check if goal object has already been placed,
         #  there are multiple of the same shapes that match the goals
         self._state_tracker.update(self._current_state)
+        self._report_to_console("Strong target: " + str(self._target_goal_index))
 
         action = self._navigator.get_move_action(self._state_tracker)
 
@@ -78,6 +77,7 @@ class StrongAgent(CustomBaselineAgent):
             self._navigator.reset_full()
             self._navigator.add_waypoints([target_loc])
             self._phase = Phase.PLAN_PATH_TO_GOAL
+            self._target_goal_index += 1
         else:
             self._checkForPossibleGoalElse(Phase.PLAN_PATH_TO_CLOSED_DOOR)
 

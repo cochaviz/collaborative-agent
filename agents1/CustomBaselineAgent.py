@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from typing import Callable, Dict, Optional
 import enum, random
 
@@ -13,7 +11,7 @@ from matrx.agents.agent_utils.state_tracker import StateTracker
 from matrx.actions.door_actions import OpenDoorAction
 from matrx.messages.message import Message
 
-Action = Optional[tuple[str, dict]]
+Action = tuple[str, dict] | None
 
 
 class Phase(enum.Enum):
@@ -184,6 +182,7 @@ class CustomBaselineAgent(BW4TBrain):
             self._target_items.clear()
         else:
             goal_target_items, all_found_goal_items = self._check_collectables()
+            self._report_to_console("Target index: " + str(self._target_goal_index))
             for goal in all_found_goal_items:
                 self._sendMessage(
                     'Found goal block ' + str(goal['visualization']) + ' at location ' + str(goal['location'])

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from matrx.actions import OpenDoorAction, CloseDoorAction
 
 from agents1.CustomBaselineAgent import CustomBaselineAgent, Action, Phase
