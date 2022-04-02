@@ -27,6 +27,8 @@ class LiarAgent(CustomBaselineAgent):
             temp2 = self.__replace_room(temp1)
             temp3 = self.__replace_location(temp2)
 
+            self._report_to_console(temp3)
+
             msg = Message(content=temp3, from_id=self._agent_name)
 
             if msg.content not in self.received_messages:
@@ -49,14 +51,14 @@ class LiarAgent(CustomBaselineAgent):
         """
         Generate a random Hex color & replace in string
         """
-        temp: str = '#%02X%02X%02X' % (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+        temp: str = "'#%02X%02X%02X'" % (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
         return "'colour': " + temp
 
     def __get_random_room(self) -> str:
         """
         Generate a random room & replace in string
         """
-        # TODO (maybe): Ensure that the chosen door isn't the door it is headed to
+        # TODO (maybe): Ensure that the chosen door isn't the door it is already headed to
         all_doors = [door for door in self._current_state.values()
                      if 'class_inheritance' in door and 'Door' in door['class_inheritance']]
         door = random.choice(all_doors)
@@ -75,7 +77,7 @@ class LiarAgent(CustomBaselineAgent):
         """
         Check if the message contains a color
         """
-        color = re.compile(r"'colour':'\s#(?:[0-9a-fA-F]{3}){1,2}\b")
+        color = re.compile(r"'colour':\s'#(?:[0-9a-fA-F]{3}){1,2}\b'")
         if color.search(msg):
             rand_color = self.__get_random_color()
             temp: str = re.sub(color, rand_color, msg)

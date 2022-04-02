@@ -76,19 +76,23 @@ class StrongAgent(CustomBaselineAgent):
                 self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
 
         elif len(self._is_carrying) == 1:
+            temp: int = len(self._goal_blocks)
+            temp2: int = self._target_goal_index
+            if temp2 > temp:
+                self._target_goal_index -= 1
+
+            self._report_to_console("Target index: " + str(self._target_goal_index))
             target_loc: list[str] = self.__get_target_loc()
-            self._report_to_console("Target loc: " + str(target_loc))
             self._navigator.reset_full()
             self._navigator.add_waypoints([target_loc])
             self._phase = Phase.PLAN_PATH_TO_GOAL
-            self._target_goal_index += 1
         else:
             if self._checkForPossibleGoal():
                 self._phase = Phase.PLAN_PATH_TO_GOAL
             else:
                 self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
 
-        # TODO: fix StrongAgent loop gets stuck, seemingly only when participating with others
+        # TODO: fix StrongAgent loop [target_goal_index] is off by one
 
         loc = self._current_state[self.agent_id]['location']
 

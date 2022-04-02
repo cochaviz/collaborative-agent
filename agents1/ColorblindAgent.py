@@ -45,7 +45,7 @@ class ColorblindAgent(CustomBaselineAgent):
         for i in range(len(strings)):
             msg: str = strings[i].content
             if color.search(msg):
-                temp: str = re.sub(color, '', msg)
+                temp: str = re.sub(color, "'colour': '#000000'", msg)
                 strings[i].content = temp
 
         return strings

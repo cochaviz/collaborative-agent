@@ -257,7 +257,7 @@ class CustomBaselineAgent(BW4TBrain):
             close_collectables = self.__filter_collectables(close_items)
 
             # check if the item under you matches the description
-            if len(close_collectables) > 0 and self.__compare_blocks(self._target_items[0], close_collectables[0]):
+            if len(close_collectables) > 0 and self._compare_blocks(self._target_items[0], close_collectables[0]):
                 self._target_items[0]['obj_id'] = close_collectables[0]['obj_id']
             else:
                 # if not the case, remove current item as considerable goal collectable match for goal object
@@ -302,7 +302,7 @@ class CustomBaselineAgent(BW4TBrain):
 
         if self._verify_goal_index():
             # TODO Also update trust
-            self._target_goal_index += 1
+            # self._target_goal_index += 1
             return self._dropBlockIfCarrying()
 
         self._target_goal_index -= 1
@@ -329,6 +329,7 @@ class CustomBaselineAgent(BW4TBrain):
 
         block: dict = self._is_carrying.pop()
         current_location: tuple = self._current_state[self.agent_id]['location']
+        self._target_goal_index += 1
 
         self._sendMessage(
             'Dropped goal block ' + str(block['visualization']) + ' at drop location ' + str(current_location))
@@ -386,14 +387,15 @@ class CustomBaselineAgent(BW4TBrain):
                         self._collectables = old_collectables
                     if 'Dropped' in message:
                         item = self.__object_from_message(message)
+                        self._report_to_console("Target goal index: " + str(self._target_goal_index))
                         current_goal_block = self._goal_blocks[self._target_goal_index]
                         # If the item matches the current goal and the drop location matches the target location
-                        if self.__compare_blocks(item, current_goal_block) and item['location'] == current_goal_block['location']:
+                        if self._compare_blocks(item, current_goal_block) and item['location'] == current_goal_block['location']:
                             # set next goal as target
                             self._target_goal_index += 1
                             # and look for collectable goal item
                             if self._checkForPossibleGoal():
-                                # drop everything we're doing now if it we know one exists
+                                # drop everything we're doing now if it knows one exists
                                 return self._dropBlockIfCarrying()
 
     def _updateTrustBelief(self, members, received) -> dict:
@@ -472,7 +474,6 @@ class CustomBaselineAgent(BW4TBrain):
                 if self._compare_blocks(block, goal_block):
                     if index == self._target_goal_index:
                         target_blocks.append(block)
-                        self._target_goal_index += 1
                     else:
                         # If it's not an index-match, keep it in mind for later
                         # TODO maybe carry it close to the goal location?
@@ -485,9 +486,6 @@ class CustomBaselineAgent(BW4TBrain):
                     # Not sure if this is the best solution, but this way it's quite simple to go
                     # from carrying an item to matching it to a goal
                     block['goal_index'] = index
-                    # del (block['visualization']['depth'])
-                    # del (block['visualization']['opacity'])
-                    # del (block['visualization']['visualize_from_center'])
                     goal_blocks.append(block)
 
         return target_blocks, goal_blocks
@@ -518,8 +516,8 @@ class CustomBaselineAgent(BW4TBrain):
         location_string = str(re.findall(r'\(.*?\)', message)[0][1:-1])
         location = tuple(map(lambda e: int(e), location_string.split(", ")))
         found_object = re.findall(r'\{.*?\}', message)[0]
-        colour = re.findall("'colour': '#\w+'", found_object)[0].split(": ")[-1][1:-1]
-        shape = int(re.findall("\'shape\': \d+", found_object)[0].split(": ")[-1])
+        colour = re.findall(r"'colour':\s'#\w+'", found_object)[0].split(":\s")[-1][1:-1]
+        shape = int(re.findall(r"\'shape\': \d+", found_object)[0].split(": ")[-1])
 
         return {
             "location": location,

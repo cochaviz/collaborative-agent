@@ -24,7 +24,7 @@ class LazyAgent(CustomBaselineAgent):
 
         # TODO maybe separate state?
         if len(closed_doors) == 0:
-            if self._checkForPossibleGoalElse():
+            if self._checkForPossibleGoal():
                 return None
             self._door = random.choice(all_doors)
         else:
@@ -111,7 +111,7 @@ class LazyAgent(CustomBaselineAgent):
         block: dict = self._is_carrying.pop()
 
         # TODO Should also be dependent on whether a message is sent
-        self._checkForPossibleGoalElse(Phase.PLAN_PATH_TO_CLOSED_DOOR)
+        self._checkForPossibleGoal(Phase.PLAN_PATH_TO_CLOSED_DOOR)
 
         loc = self._current_state[self.agent_id]['location']
         self._sendMessage(

@@ -17,9 +17,9 @@ if __name__ == "__main__":
     agents = [
         {'name':'agent1', 'botclass': StrongAgent, 'settings':{}},
         # {'name':'agent3', 'botclass': CustomBaselineAgent, 'settings':{}},
-        # {'name':'agent2', 'botclass': ColorblindAgent, 'settings':{}},
+        {'name':'agent2', 'botclass': ColorblindAgent, 'settings':{}},
         {'name': 'agent4', 'botclass': LiarAgent, 'settings': {}},
-        # {'name':'agent5', 'botclass': LazyAgent, 'settings':{}},
+        {'name':'agent5', 'botclass': LazyAgent, 'settings':{}},
         {'name':'human', 'botclass': Human, 'settings':{}}
         ]
 
