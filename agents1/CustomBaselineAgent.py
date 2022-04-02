@@ -172,7 +172,7 @@ class CustomBaselineAgent(BW4TBrain):
 
     def _followRoomCheckPhase(self) -> Action | None:
         self._sendMessage('Searching through ' + self._door['room_name'])
-        self.__saveObjectsAround()
+        self._saveObjectsAround()
 
         self._state_tracker.update(self._current_state)
         action = self._navigator.get_move_action(self._state_tracker)

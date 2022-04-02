@@ -88,40 +88,12 @@ class StrongAgent(CustomBaselineAgent):
 
         return DropObject.__name__, {'object_id': block['obj_id']}
 
-    def __compare_blocks(self, a, b) -> bool:
-        return a['visualization']['colour'] == b['visualization']['colour'] and \
-               a['visualization']['shape'] == b['visualization']['shape']
-
     def __get_target_loc(self) -> list[str]:
         block = self._is_carrying[0]
         for index, goal_block in enumerate(self._goal_blocks):
-            if self.__compare_blocks(block, goal_block):
+            if self._compare_blocks(block, goal_block):
                 return goal_block['location']
 
-    def __check_collectables(self) -> tuple[list[dict], list[dict]]:
-        target_blocks: list[dict] = []
-        goal_blocks: list[dict] = []
-
-        for block in self._collectables:
-            for index, goal_block in enumerate(self._goal_blocks):
-                if self.__compare_blocks(block, goal_block):
-                    if index == self._target_goal_index:
-                        target_blocks.append(block)
-                        self._target_goal_index += 1
-                    else:
-                        # If it's not an index-match, keep it in mind for later
-                        # TODO: maybe carry it close to the goal location?
-                        goal_block['collectable_match'] = block
-
-                    # Not sure if this is the best solution, but this way it's quite simple to go
-                    # from carrying an item to matching it to a goal
-                    block['goal_index'] = index
-                    del (block['visualization']['depth'])
-                    del (block['visualization']['opacity'])
-                    del (block['visualization']['visualize_from_center'])
-                    goal_blocks.append(block)
-
-        return target_blocks, goal_blocks
     # Have agent head to the open doors
 
     # Ensure that they only pick up one of each goal items
