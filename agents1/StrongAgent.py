@@ -12,8 +12,20 @@ class StrongAgent(CustomBaselineAgent):
         super().__init__(settings)
         self._capacity = 2
 
+    def _saveObjectsAround(self) -> None:
+        objects: list[dict] | None = self._current_state.get_room_objects(self._door['room_name'])
+        # TODO: if index doesn't equal current target goal index, drop off point should be around the goal
+        if objects is None:
+            return
+
+        collectables: list[dict] = self._filter_collectables(objects)
+
+        for collectable in collectables:
+            if collectable not in self._collectables and collectable not in self._is_carrying:
+                self._collectables.append(collectable)
+
     def _getItemPhase(self) -> Action | None:
-        if len(self._is_carrying) + 1 == self._capacity:
+        if len(self._is_carrying) == self._capacity - 1:
             self._phase = Phase.PLAN_PATH_TO_GOAL
         elif (len(self._goal_blocks) - 1) == self._target_goal_index:
             self._phase = Phase.PLAN_PATH_TO_GOAL
@@ -26,8 +38,6 @@ class StrongAgent(CustomBaselineAgent):
         assert len(self._target_items) != 0
 
         self._is_carrying.append(self._target_items[0])
-        # self._target_goal_index += 1
-        self._report_to_console("Target goal index: " + str(self._target_goal_index))
         self._target_items.clear()
 
         self._sendMessage(
@@ -57,7 +67,6 @@ class StrongAgent(CustomBaselineAgent):
         # TODO: Check if goal object has already been placed,
         #  there are multiple of the same shapes that match the goals
         self._state_tracker.update(self._current_state)
-        self._report_to_console("Strong target: " + str(self._target_goal_index))
 
         action = self._navigator.get_move_action(self._state_tracker)
 
@@ -71,7 +80,7 @@ class StrongAgent(CustomBaselineAgent):
         if len(self._is_carrying) == 0:
             # TODO Should also be dependent on whether a message is sent
             if self._checkForPossibleGoal():
-                self._phase = Phase.PLAN_PATH_TO_TARGET_ITEMS
+                return
             else:
                 self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
 
@@ -81,19 +90,15 @@ class StrongAgent(CustomBaselineAgent):
             if temp2 > temp:
                 self._target_goal_index -= 1
 
-            self._report_to_console("Target index: " + str(self._target_goal_index))
             target_loc: list[str] = self.__get_target_loc()
             self._navigator.reset_full()
             self._navigator.add_waypoints([target_loc])
             self._phase = Phase.PLAN_PATH_TO_GOAL
         else:
-            if self._checkForPossibleGoal():
-                self._phase = Phase.PLAN_PATH_TO_GOAL
-            else:
+            if not self._checkForPossibleGoal():
                 self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
 
         # TODO: fix StrongAgent loop [target_goal_index] is off by one
-
         loc = self._current_state[self.agent_id]['location']
 
         self._sendMessage(
@@ -101,8 +106,15 @@ class StrongAgent(CustomBaselineAgent):
 
         return DropObject.__name__, {'object_id': block['obj_id']}
 
-    def __get_target_loc(self) -> list[str]:
+    def __get_target_loc(self) -> tuple|None:
         block = self._is_carrying[0]
-        for index, goal_block in enumerate(self._goal_blocks):
+
+        for goal_block in self._goal_blocks:
             if self._compare_blocks(block, goal_block):
                 return goal_block['location']
+
+    def __in_block_list(self, item, block_list) -> bool:
+        for other in block_list:
+            if self._compare_blocks(item, other):
+                return True
+        return False

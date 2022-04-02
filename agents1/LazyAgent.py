@@ -40,6 +40,7 @@ class LazyAgent(CustomBaselineAgent):
     def _followPathToGoalPhase(self) -> Action | None:
         flaky =  self._be_flaky()
         if flaky is not None:
+            self._report_to_console("I'm cancelling this shit...")
             self._phase = Phase.CANCEL_GOAL
             return flaky
 
@@ -52,5 +53,5 @@ class LazyAgent(CustomBaselineAgent):
         """
         if random.random() <= 0.5:
             self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
-            return self._dropBlockIfCarrying()
+            return self._dropBlockIfCarrying(check_for_goal=False)
         return None

@@ -36,13 +36,11 @@ class ColorblindAgent(CustomBaselineAgent):
         for mssg in self.received_messages:
             for member in teamMembers:
                 if mssg.from_id == member:
-                    self._report_to_console(mssg.content)
                     receivedMessages[member].append(mssg.content)
         return receivedMessages
 
     def __filter_messages(self, strings) -> list[str]:
         color = re.compile(r"'colour':.*?,")
-        print(color)
         for i in range(len(strings)):
             msg: str = strings[i].content
             if color.search(msg):
