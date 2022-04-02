@@ -17,10 +17,6 @@ class ColorblindAgent(CustomBaselineAgent):
 
     # Have the colorblind agent open all the doors
     def _openDoorPhase(self) -> Action | None:
-        '''
-
-        '''
-
         self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
         self._sendMessage('Opening door of ' + self._door['room_name'])
 

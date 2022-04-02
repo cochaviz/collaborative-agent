@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from matrx.actions import GrabObject, DropObject, GrabObjectResult
+from matrx.actions import GrabObject, DropObject, GrabObjectResult, DropObjectResult
 
 from agents1.CustomBaselineAgent import CustomBaselineAgent, Action, Phase
 
@@ -29,6 +29,7 @@ class StrongAgent(CustomBaselineAgent):
 
         self._is_carrying.append(self._target_items[0])
         # self._target_goal_index += 1
+        self._report_to_console("Target goal index: " + str(self._target_goal_index))
         self._target_items.clear()
 
         self._sendMessage(
@@ -37,8 +38,6 @@ class StrongAgent(CustomBaselineAgent):
         )
 
         temp: int = 0 if len(self._is_carrying) == 1 else 1
-
-        self._report_to_console("Temp: " + str(temp))
 
         return GrabObject.__name__, {'object_id': self._is_carrying[temp]['obj_id']}
 
@@ -82,7 +81,10 @@ class StrongAgent(CustomBaselineAgent):
         else:
             self._checkForPossibleGoalElse(Phase.PLAN_PATH_TO_CLOSED_DOOR)
 
+        # TODO: fix StrongAgent loop gets stuck, seemingly only when participating with others
+
         loc = self._current_state[self.agent_id]['location']
+
         self._sendMessage(
             'Dropped goal block ' + str(block['visualization']) + ' at drop location ' + str(loc))
 
@@ -93,7 +95,3 @@ class StrongAgent(CustomBaselineAgent):
         for index, goal_block in enumerate(self._goal_blocks):
             if self._compare_blocks(block, goal_block):
                 return goal_block['location']
-
-    # Have agent head to the open doors
-
-    # Ensure that they only pick up one of each goal items
