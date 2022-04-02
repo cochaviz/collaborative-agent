@@ -75,7 +75,7 @@ class LiarAgent(CustomBaselineAgent):
         """
         Check if the message contains a color
         """
-        color = re.compile(r"'colour':\s'#(?:[0-9a-fA-F]{3}){1,2}\b")
+        color = re.compile(r"'colour':'\s#(?:[0-9a-fA-F]{3}){1,2}\b")
         if color.search(msg):
             rand_color = self.__get_random_color()
             temp: str = re.sub(color, rand_color, msg)

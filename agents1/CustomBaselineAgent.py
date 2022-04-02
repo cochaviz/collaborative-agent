@@ -382,7 +382,7 @@ class CustomBaselineAgent(BW4TBrain):
                         item = self.__object_from_message(message)
                         old_collectables = self._collectables
                         self._collectables = [item]
-                        self.__check_collectables()
+                        self._check_collectables()
                         self._collectables = old_collectables
                     if 'Dropped' in message:
                         item = self.__object_from_message(message)
@@ -485,9 +485,9 @@ class CustomBaselineAgent(BW4TBrain):
                     # Not sure if this is the best solution, but this way it's quite simple to go
                     # from carrying an item to matching it to a goal
                     block['goal_index'] = index
-                    del (block['visualization']['depth'])
-                    del (block['visualization']['opacity'])
-                    del (block['visualization']['visualize_from_center'])
+                    # del (block['visualization']['depth'])
+                    # del (block['visualization']['opacity'])
+                    # del (block['visualization']['visualize_from_center'])
                     goal_blocks.append(block)
 
         return target_blocks, goal_blocks

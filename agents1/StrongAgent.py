@@ -70,7 +70,11 @@ class StrongAgent(CustomBaselineAgent):
 
         if len(self._is_carrying) == 0:
             # TODO Should also be dependent on whether a message is sent
-            self._checkForPossibleGoalElse(Phase.PLAN_PATH_TO_CLOSED_DOOR)
+            if self._checkForPossibleGoal():
+                self._phase = Phase.PLAN_PATH_TO_TARGET_ITEMS
+            else:
+                self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
+
         elif len(self._is_carrying) == 1:
             target_loc: list[str] = self.__get_target_loc()
             self._report_to_console("Target loc: " + str(target_loc))
@@ -79,7 +83,10 @@ class StrongAgent(CustomBaselineAgent):
             self._phase = Phase.PLAN_PATH_TO_GOAL
             self._target_goal_index += 1
         else:
-            self._checkForPossibleGoalElse(Phase.PLAN_PATH_TO_CLOSED_DOOR)
+            if self._checkForPossibleGoal():
+                self._phase = Phase.PLAN_PATH_TO_GOAL
+            else:
+                self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
 
         # TODO: fix StrongAgent loop gets stuck, seemingly only when participating with others
 
