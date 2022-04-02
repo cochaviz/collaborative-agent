@@ -40,8 +40,9 @@ class ColorblindAgent(CustomBaselineAgent):
                     receivedMessages[member].append(mssg.content)
         return receivedMessages
 
-    def __filter_messages(self, strings) -> [str]:
-        color = re.compile(r"'colour':\s'#(?:[0-9a-fA-F]{3}){1,2}\b")
+    def __filter_messages(self, strings) -> list[str]:
+        color = re.compile(r"'colour':.*?,")
+        print(color)
         for i in range(len(strings)):
             msg: str = strings[i].content
             if color.search(msg):
@@ -49,3 +50,6 @@ class ColorblindAgent(CustomBaselineAgent):
                 strings[i].content = temp
 
         return strings
+
+    def _compare_blocks(self, a, b) -> bool:
+        return a['visualization']['shape'] == b['visualization']['shape']
