@@ -1,8 +1,12 @@
 from typing import Callable, Dict, Optional
 import enum, random
+import json
+import random
+import re
+from os.path import exists
 
-from matrx.actions.move_actions import MoveNorth, MoveWest, MoveNorthWest
-from matrx.actions.object_actions import GrabObject, DropObject, RemoveObject
+from matrx.actions.move_actions import MoveNorth, MoveWest
+from matrx.actions.object_actions import GrabObject, DropObject, RemoveObject, GrabObjectResult
 
 from bw4t.BW4TBrain import BW4TBrain
 from matrx.agents.agent_utils.state import State
@@ -12,7 +16,6 @@ from matrx.actions.door_actions import OpenDoorAction
 from matrx.messages.message import Message
 
 Action = tuple[str, dict] | None
-
 
 class Phase(enum.Enum):
     PLAN_PATH_TO_CLOSED_DOOR = 1
@@ -29,6 +32,7 @@ class Phase(enum.Enum):
 
     PLAN_PATH_TO_GOAL = 8
     FOLLOW_PATH_TO_GOAL = 9
+    CANCEL_GOAL = 12
 
 
 class CustomBaselineAgent(BW4TBrain):
@@ -45,12 +49,35 @@ class CustomBaselineAgent(BW4TBrain):
         self._collectables: list[dict] = []
         self._target_items: list[dict] = []
         self._is_carrying: list[dict] = []
+        self._last_grab_action_succesful: bool = True
 
         self._goal_blocks: list[dict] = []
 
         # dropping items on the goals has to go in the right order
         # this corresponds to a goal in the self._goal_blocks attribute
         self._target_goal_index: int = 0
+
+        # is true when acting on second-hand information
+        self._acting_on_trust: bool = False
+        self._trusting_agent: str = ""
+        self._trustBeliefs: None|dict = None
+
+        self._memory: dict[Phase, dict] = {
+            Phase.PLAN_PATH_TO_CLOSED_DOOR: {},
+            Phase.FOLLOW_PATH_TO_CLOSED_DOOR: {},
+            Phase.OPEN_DOOR: {},
+
+            Phase.ENTER_ROOM: {},
+            Phase.PLAN_ROOM_CHECK: {},
+            Phase.FOLLOW_ROOM_CHECK: {},
+
+            Phase.PLAN_PATH_TO_TARGET_ITEMS: {},
+            Phase.FOLLOW_PATH_TO_TARGET_ITEMS: {},
+            Phase.GET_ITEM: {},
+
+            Phase.PLAN_PATH_TO_GOAL: {},
+            Phase.FOLLOW_PATH_TO_GOAL: {},
+        }
 
         self._agent_name: None | str = None
         self._current_state: State
@@ -71,6 +98,7 @@ class CustomBaselineAgent(BW4TBrain):
 
             Phase.PLAN_PATH_TO_GOAL: self._planPathToGoalPhase,
             Phase.FOLLOW_PATH_TO_GOAL: self._followPathToGoalPhase,
+            Phase.CANCEL_GOAL: self._cancelGoalPhase,
         }
 
     def initialize(self) -> None:
@@ -100,9 +128,11 @@ class CustomBaselineAgent(BW4TBrain):
         received_messages = self._processMessages(self._teamMembers)
 
         # Update trust beliefs for team members
-        self._trustBlief(self._teamMembers, received_messages)
+        self._updateTrustBelief(self._teamMembers, received_messages)
+        self._memorize(self._teamMembers, received_messages)
 
         while True:
+            assert self._phase is not None
             action_and_subject = self._switchPhase[self._phase]()
 
             if action_and_subject is not None and action_and_subject[0] is not None:
@@ -118,7 +148,7 @@ class CustomBaselineAgent(BW4TBrain):
 
         # TODO maybe separate state?
         if len(closed_doors) == 0:
-            if self._checkForPossibleGoalElse():
+            if self._checkForPossibleGoal():
                 return None
             self._door = random.choice(all_doors)
         else:
@@ -221,7 +251,20 @@ class CustomBaselineAgent(BW4TBrain):
         # TODO: probably doesn't need to be its own phase
         self._phase = Phase.PLAN_PATH_TO_GOAL
 
-        assert len(self._target_items) != 0
+        # if target item is only a hint by another agent
+        if not 'obj_id' in self._target_items[0]:
+            close_items = self._current_state.get_objects_in_area(top_left=self._current_state[self.agent_id]['location'], width=1, height=1)
+            close_collectables = self.__filter_collectables(close_items)
+
+            # check if the item under you matches the description
+            if len(close_collectables) > 0 and self.__compare_blocks(self._target_items[0], close_collectables[0]):
+                self._target_items[0]['obj_id'] = close_collectables[0]['obj_id']
+            else:
+                # if not the case, remove current item as considerable goal collectable match for goal object
+                self._goal_blocks[self._target_items[0]['goal_index']].pop('collectable_match')
+                self._target_items.clear()
+                self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
+                return
 
         self._is_carrying.append(self._target_items[0])
         self._target_items.clear()
@@ -242,7 +285,6 @@ class CustomBaselineAgent(BW4TBrain):
 
         if len(self._is_carrying) == 0:
             self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
-            # TODO: Restore this by going through all the items that are not goals and removing them?
             return
 
         else:  # Drop off goal object to its correct location
@@ -251,8 +293,6 @@ class CustomBaselineAgent(BW4TBrain):
             self._phase = Phase.FOLLOW_PATH_TO_GOAL
 
     def _followPathToGoalPhase(self) -> Action | None:
-        # TODO: Check if goal object has already been placed,
-        #  there are multiple of the same shapes that match the goals
         self._state_tracker.update(self._current_state)
 
         action = self._navigator.get_move_action(self._state_tracker)
@@ -260,27 +300,53 @@ class CustomBaselineAgent(BW4TBrain):
         if action is not None:
             return action, {}
 
+        if self._verify_goal_index():
+            # TODO Also update trust
+            self._target_goal_index += 1
+            return self._dropBlockIfCarrying()
+
+        self._target_goal_index -= 1
+        self._phase = Phase.CANCEL_GOAL
+
+    def _cancelGoalPhase(self) -> Action | None:
+        if self._current_state[self.agent_id]['location'] != self._goal_blocks[self._target_goal_index]['location']:
+            self._phase = Phase.OPEN_DOOR
+            return self._dropBlockIfCarrying()
+
+        return MoveWest.__name__, {}
+
+    def _verify_goal_index(self) -> bool:
+        current_location = self._current_state[self.agent_id]['location']
+        # south of us should be a collectable
+        current_location = current_location[0], current_location[1] + 1
+        objects = self._current_state.get_objects_in_area(top_left=current_location, width=1, height=1)
+
+        return self._target_goal_index == 0 or len(self.__filter_collectables(objects)) > 0
+
+    def _dropBlockIfCarrying(self) -> Action | None:
+        if len(self._is_carrying) == 0 :
+           return None
+
         block: dict = self._is_carrying.pop()
+        current_location: tuple = self._current_state[self.agent_id]['location']
 
-        # TODO Should also be dependent on whether a message is sent
-        self._checkForPossibleGoalElse(Phase.PLAN_PATH_TO_CLOSED_DOOR)
-
-        loc = self._current_state[self.agent_id]['location']
         self._sendMessage(
-            'Dropped goal block ' + str(block['visualization']) + ' at drop location ' + str(loc))
+            'Dropped goal block ' + str(block['visualization']) + ' at drop location ' + str(current_location))
+
+        if not self._checkForPossibleGoal():
+            self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
 
         return DropObject.__name__, {'object_id': block['obj_id']}
 
-    def _checkForPossibleGoalElse(self, alternative: Phase|None=None):
+
+    def _checkForPossibleGoal(self, set_target_and_phase:bool=True) -> bool:
         match = self._check_for_current_target_goal()
 
         if match is not None:
             self._target_items = [match]
             self._phase = Phase.PLAN_PATH_TO_TARGET_ITEMS
-        else:
-            self._phase = alternative
 
-        return match is not None and self._phase is not None
+        return match is not None
 
     # ==== MESSAGES ====
 
@@ -307,21 +373,54 @@ class CustomBaselineAgent(BW4TBrain):
 
     # ==== TRUST ====
 
-    def _trustBlief(self, member, received) -> dict:
-        '''
-        Baseline implementation of a trust belief. Creates a dictionary with trust belief scores for each team member, for example based on the received messages.
-        '''
-        # You can change the default value to your preference
-        default = 0.5
-        trustBeliefs = {}
-        for member in received.keys():
-            trustBeliefs[member] = default
+    def _memorize(self, member, received) -> None:
         for member in received.keys():
             for message in received[member]:
+                if member != self.agent_id:
+                    # TODO if picking up object, remove from considered collectable goals
+                    if 'Found' in message:
+                        item = self.__object_from_message(message)
+                        old_collectables = self._collectables
+                        self._collectables = [item]
+                        self.__check_collectables()
+                        self._collectables = old_collectables
+                    if 'Dropped' in message:
+                        item = self.__object_from_message(message)
+                        current_goal_block = self._goal_blocks[self._target_goal_index]
+                        # If the item matches the current goal and the drop location matches the target location
+                        if self.__compare_blocks(item, current_goal_block) and item['location'] == current_goal_block['location']:
+                            # set next goal as target
+                            self._target_goal_index += 1
+                            # and look for collectable goal item
+                            if self._checkForPossibleGoal():
+                                # drop everything we're doing now if it we know one exists
+                                return self._dropBlockIfCarrying()
+
+    def _updateTrustBelief(self, members, received) -> dict:
+        if self._trustBeliefs is None:
+            self.__initTrust(members)
+
+        for member in members:
+            for message in received[member]:
                 if 'Found' in message and 'colour' not in message:
-                    trustBeliefs[member] -= 0.1
+                    self._trustBeliefs[member] -= 0.1
                     break
-        return trustBeliefs
+                if 'Opening' in message:
+                    room_name = message.split()[-1]
+                    all_doors = [ door for door in self._current_state.values()
+                                            if 'class_inheritance' in door and 'Door' in door['class_inheritance']]
+                    closed_rooms = [door['room_name'] for door in all_doors if not door['is_open']]
+
+                    if room_name in closed_rooms:
+                        self._trustBeliefs[member] -=0.1
+
+        self._report_to_console(self._trustBeliefs)
+
+    def __initTrust(self, members, default=.5):
+        self._trustBeliefs = {}
+
+        for member in members:
+            self._trustBeliefs[member] = default
 
     # ==== UTILS ====
 
@@ -358,7 +457,7 @@ class CustomBaselineAgent(BW4TBrain):
         if objects is None:
             return
 
-        collectables: list[dict] = list(filter(lambda e: 'CollectableBlock' in e['class_inheritance'], objects))
+        collectables: list[dict] = self.__filter_collectables(objects)
 
         for collectable in collectables:
             if collectable not in self._collectables:
@@ -376,8 +475,12 @@ class CustomBaselineAgent(BW4TBrain):
                         self._target_goal_index += 1
                     else:
                         # If it's not an index-match, keep it in mind for later
-                        # TODO: maybe carry it close to the goal location?
-                        goal_block['collectable_match'] = block
+                        # TODO maybe carry it close to the goal location?
+                        if 'collectable_match' in goal_block:
+                            goal_block['collectable_match'] = \
+                                self.__return_closest_to(goal_block['collectable_match'], block, goal_block['location'])
+                        else:
+                            goal_block['collectable_match'] = block
 
                     # Not sure if this is the best solution, but this way it's quite simple to go
                     # from carrying an item to matching it to a goal
@@ -410,3 +513,31 @@ class CustomBaselineAgent(BW4TBrain):
             return current_goal['collectable_match']
         else:
             return None
+
+    def __object_from_message(self, message):
+        location_string = str(re.findall(r'\(.*?\)', message)[0][1:-1])
+        location = tuple(map(lambda e: int(e), location_string.split(", ")))
+        found_object = re.findall(r'\{.*?\}', message)[0]
+        colour = re.findall("'colour': '#\w+'", found_object)[0].split(": ")[-1][1:-1]
+        shape = int(re.findall("\'shape\': \d+", found_object)[0].split(": ")[-1])
+
+        return {
+            "location": location,
+            "visualization": {
+                "colour": colour,
+                "shape": shape
+                },
+            }
+
+    def __return_closest_to(self, a:dict, b:dict, location:tuple) -> dict:
+        if self.__distance(a['location'], location) < self.__distance(b['location'], location):
+            return a
+        return b
+
+    def __filter_collectables(self, objects):
+        return list(filter(lambda e: 'CollectableBlock' in e['class_inheritance'], objects))
+
+    def __distance(self, a:tuple, b:tuple) -> int:
+        x_a, y_a = a
+        x_b, y_b = b
+        return abs(x_a - x_b) + abs(y_a - y_b)
