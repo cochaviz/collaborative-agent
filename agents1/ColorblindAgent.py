@@ -1,4 +1,4 @@
-from matrx.actions import OpenDoorAction, CloseDoorAction
+from matrx.actions import OpenDoorAction
 
 from agents1.CustomBaselineAgent import CustomBaselineAgent, Action, Phase
 
@@ -13,8 +13,10 @@ class ColorblindAgent(CustomBaselineAgent):
     def __init__(self, settings):
         super().__init__(settings)
 
-    # Have the colorblind agent open all the doors
     def _openDoorPhase(self) -> Action | None:
+        """
+        Has agent continue opening the doors
+        """
         self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
         self._sendMessage('Opening door of ' + self._door['room_name'])
 
@@ -22,9 +24,10 @@ class ColorblindAgent(CustomBaselineAgent):
         return OpenDoorAction.__name__, {'object_id': self._door['obj_id']}
 
     def _processMessages(self, teamMembers) -> dict:
-        '''
-        Process incoming messages and create a dictionary with received messages from each team member.
-        '''
+        """
+        Process incoming messages by filtering out the color and create a dictionary with received messages
+        from each team member.
+        """
         receivedMessages = {}
         for member in teamMembers:
             receivedMessages[member] = []
@@ -40,6 +43,9 @@ class ColorblindAgent(CustomBaselineAgent):
         return receivedMessages
 
     def __filter_messages(self, strings) -> list[str]:
+        """
+        Replace any instance of colour in the message with black
+        """
         color = re.compile(r"'colour':.*?,")
         for i in range(len(strings)):
             msg: str = strings[i].content
@@ -50,4 +56,7 @@ class ColorblindAgent(CustomBaselineAgent):
         return strings
 
     def _compare_blocks(self, a, b) -> bool:
+        """
+        Compare blocks based on their shape
+        """
         return a['visualization']['shape'] == b['visualization']['shape']

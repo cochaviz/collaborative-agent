@@ -1,5 +1,7 @@
-from typing import Callable, Dict
-import enum, random
+from __future__ import annotations
+
+from typing import Callable, Dict, Optional
+import enum
 import random
 import re
 
@@ -13,7 +15,7 @@ from matrx.agents.agent_utils.state_tracker import StateTracker
 from matrx.actions.door_actions import OpenDoorAction
 from matrx.messages.message import Message
 
-Action = tuple[str, dict] | None
+Action = Optional[tuple[str, dict]]
 
 class Phase(enum.Enum):
     PLAN_PATH_TO_CLOSED_DOOR = 1

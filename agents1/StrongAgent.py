@@ -1,4 +1,6 @@
-from matrx.actions import GrabObject, DropObject, GrabObjectResult, DropObjectResult
+import math
+
+from matrx.actions import GrabObject, DropObject
 
 from agents1.CustomBaselineAgent import CustomBaselineAgent, Action, Phase
 
@@ -31,7 +33,13 @@ class StrongAgent(CustomBaselineAgent):
             self._phase = Phase.PLAN_PATH_TO_GOAL
         else:
             if len(self._target_items) > 1:
-                self._phase = Phase.FOLLOW_PATH_TO_TARGET_ITEMS
+                dist: str = self.__get_distance()
+
+                if dist == "goal":
+                    self._report_to_console("Closer")
+                    self._phase = Phase.PLAN_PATH_TO_GOAL
+                else:
+                    self._phase = Phase.FOLLOW_PATH_TO_TARGET_ITEMS
             else:
                 self._phase = Phase.ENTER_ROOM
 
@@ -39,6 +47,7 @@ class StrongAgent(CustomBaselineAgent):
 
         self._is_carrying.append(self._target_items[0])
         self._target_items.clear()
+        self._target_goal_index += 1
 
         self._sendMessage(
             'Picking up goal block ' + str(self._is_carrying[-1]['visualization']) + ' at location ' + str(
@@ -46,12 +55,13 @@ class StrongAgent(CustomBaselineAgent):
         )
 
         temp: int = 0 if len(self._is_carrying) == 1 else 1
+        self._report_to_console("Carrying: " + str(self._is_carrying[temp]['obj_id']))
 
         return GrabObject.__name__, {'object_id': self._is_carrying[temp]['obj_id']}
 
     def _planPathToGoalPhase(self) -> Action | None:
         # Could possibly be done a bit more elegantly
-        target_locations: list[str] = self.__get_target_loc()
+        target_locations: list[str] = self.__get_target_loc(self._is_carrying[0])
 
         if len(self._is_carrying) == 0:
             self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
@@ -75,22 +85,22 @@ class StrongAgent(CustomBaselineAgent):
 
         # Reverse the list because the agent picks up the items in order of goal
         self._is_carrying.reverse()
+
         block: dict = self._is_carrying.pop()
+
+        if block is None:
+            self._phase = Phase.PLAN_PATH_TO_TARGET_ITEMS
 
         if len(self._is_carrying) == 0:
             # TODO Should also be dependent on whether a message is sent
             if self._checkForPossibleGoal():
-                return
+                self._phase = Phase.PLAN_PATH_TO_TARGET_ITEMS
             else:
                 self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
 
         elif len(self._is_carrying) == 1:
-            temp: int = len(self._goal_blocks)
-            temp2: int = self._target_goal_index
-            if temp2 > temp:
-                self._target_goal_index -= 1
+            target_loc: list[str] = self.__get_target_loc(self._is_carrying[0])
 
-            target_loc: list[str] = self.__get_target_loc()
             self._navigator.reset_full()
             self._navigator.add_waypoints([target_loc])
             self._phase = Phase.PLAN_PATH_TO_GOAL
@@ -98,7 +108,6 @@ class StrongAgent(CustomBaselineAgent):
             if not self._checkForPossibleGoal():
                 self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
 
-        # TODO: fix StrongAgent loop [target_goal_index] is off by one
         loc = self._current_state[self.agent_id]['location']
 
         self._sendMessage(
@@ -106,9 +115,7 @@ class StrongAgent(CustomBaselineAgent):
 
         return DropObject.__name__, {'object_id': block['obj_id']}
 
-    def __get_target_loc(self) -> tuple|None:
-        block = self._is_carrying[0]
-
+    def __get_target_loc(self, block) -> tuple|None:
         for goal_block in self._goal_blocks:
             if self._compare_blocks(block, goal_block):
                 return goal_block['location']
@@ -118,3 +125,18 @@ class StrongAgent(CustomBaselineAgent):
             if self._compare_blocks(item, other):
                 return True
         return False
+
+    def __get_distance(self) -> str:
+        self_loc: list[str] = self._current_state[self.agent_id]['location']
+        goal_loc: list[str] = self.__get_target_loc(self._is_carrying[0])
+
+        next_loc: list[str] = self.get_current_waypoint()
+
+        dist_goal = math.sqrt(((self_loc[0] - goal_loc[0]) ** 2) + ((self_loc[1] - goal_loc[1]) ** 2))
+
+        dist_next = math.sqrt(((self_loc[0] - next_loc[0]) ** 2) + ((self_loc[1] - next_loc[1]) ** 2))
+
+        if dist_goal < dist_next:
+            return "goal"
+        else:
+            return "next"

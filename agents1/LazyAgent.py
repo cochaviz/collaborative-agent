@@ -1,5 +1,3 @@
-from matrx.actions import OpenDoorAction, GrabObject, DropObject
-
 from agents1.CustomBaselineAgent import CustomBaselineAgent, Phase, Action
 
 import random
@@ -16,14 +14,20 @@ class LazyAgent(CustomBaselineAgent):
         super().__init__(settings)
 
     def _openDoorPhase(self) -> Action | None:
-        flaky =  self._be_flaky()
+        """
+        Opens doors 50% of the time.
+        """
+        flaky = self._be_flaky()
         if flaky is not None:
             return flaky
 
         super()._openDoorPhase()
 
     def _followRoomCheckPhase(self) -> Action | None:
-        flaky =  self._be_flaky()
+        """
+        Follows room checks 50% of the time.
+        """
+        flaky = self._be_flaky()
         if flaky is not None:
             self._collectables.clear()
             return flaky
@@ -31,14 +35,20 @@ class LazyAgent(CustomBaselineAgent):
         super()._followRoomCheckPhase()
 
     def _getItemPhase(self) -> Action | None:
-        flaky =  self._be_flaky()
+        """
+        Gets items 50% of the time
+        """
+        flaky = self._be_flaky()
         if flaky is not None:
             return flaky
 
         super()._getItemPhase()
 
     def _followPathToGoalPhase(self) -> Action | None:
-        flaky =  self._be_flaky()
+        """
+        Follows path to the goal 50% of the time.
+        """
+        flaky = self._be_flaky()
         if flaky is not None:
             self._report_to_console("I'm cancelling this shit...")
             self._phase = Phase.CANCEL_GOAL
@@ -49,7 +59,7 @@ class LazyAgent(CustomBaselineAgent):
     def _be_flaky(self) -> Action | None:
         """
         Will stop doing whatever it is doing and default back to PLAN_PATH_TO_CLOSED_DOOR
-        drops an object if it has one
+        drops an object if it has one.
         """
         if random.random() <= 0.5:
             self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR

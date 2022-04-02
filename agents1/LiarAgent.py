@@ -48,7 +48,7 @@ class LiarAgent(CustomBaselineAgent):
         """
         Generate a random Hex color & replace in string
         """
-        temp: str = "'#%02X%02X%02X'" % (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+        temp: str = "'#%02x%02x%02x'" % (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
         return "'colour': " + temp
 
     def __get_random_room(self) -> str:
@@ -74,7 +74,7 @@ class LiarAgent(CustomBaselineAgent):
         """
         Check if the message contains a color
         """
-        color = re.compile(r"'colour':\s'#(?:[0-9a-fA-F]{3}){1,2}\b'")
+        color = re.compile(r"'colour':\s'#(?:[0-9a-f]{3}){1,2}\b'")
         if color.search(msg):
             rand_color = self.__get_random_color()
             temp: str = re.sub(color, rand_color, msg)
