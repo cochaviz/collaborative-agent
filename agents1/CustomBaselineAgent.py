@@ -16,7 +16,7 @@ from matrx.agents.agent_utils.state_tracker import StateTracker
 from matrx.actions.door_actions import OpenDoorAction
 from matrx.messages.message import Message
 
-Action = tuple[str, dict]
+Action = tuple[str, dict] | None
 
 
 class Phase(enum.Enum):
