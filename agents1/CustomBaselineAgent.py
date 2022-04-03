@@ -1,7 +1,7 @@
 import csv
 import os
 from _csv import writer
-from typing import Callable, Dict, OrderedDict
+from typing import Callable, Dict, OrderedDict, Optional
 import enum
 import random
 import re
@@ -392,6 +392,10 @@ class CustomBaselineAgent(BW4TBrain):
 
     def _memorize(self, member, received) -> Action | None:
         for member in received.keys():
+            # Ignore messages from agents we don't trust
+            if self._trustBeliefs[member] < 0.3:
+                print("Dont trust: " + str(member))
+                break
             for message in received[member]:
                 if True or member != self.agent_id:
                     # TODO if picking up object, remove from considered collectable goals
@@ -432,31 +436,29 @@ class CustomBaselineAgent(BW4TBrain):
             for message in received[member]:
                 if 'Found' in message and '#00000' in message:
                     self._trustBeliefs[member] -= 0.1
+                elif 'Found' in message:
+                    item = self.__object_from_message(message)
+                    index = self.__get_matching_goal_index(item)
+                    if index < 0:
+                        self._trustBeliefs[member] -= 0.1
+                    else:
+                        self._trustBeliefs[member] += 0.1
                 if 'Opening' in message:
-                    room_name = message.split()[-1]
-                    all_doors = [door for door in self._current_state.values()
-                                 if 'class_inheritance' in door and 'Door' in door['class_inheritance']]
-                    closed_rooms = [door['room_name'] for door in all_doors if not door['is_open']]
-
-                    if room_name in closed_rooms:
+                    self._door_trust_positive(message, member)
+                if 'Searching' in message:
+                    self._door_trust(message, member)
+                if 'Dropped' in message:
+                    item = self.__object_from_message(message)
+                    index = self.__get_matching_goal_index(item)
+                    # This is just the messages receive by colorblind agent
+                    if item['visualization']['colour'] == '#000000':
+                        break
+                    if index < 0:
                         self._trustBeliefs[member] -= 0.1
                     else:
                         self._trustBeliefs[member] += 0.1
 
-                # if 'Dropped' in message:
-                #     item = self.__object_from_message(message)
-                #     count: int = 0
-                #     for location in self._target_items:
-                #         self._report_to_console("Location: " + str(location['location']))
-                #         self._report_to_console("Said loc: " + str(item['location']))
-                #         if item['location'] == location['location']:
-                #             count += 1
-                #     if count == 1:
-                #         self._trustBeliefs[member] += 0.2
-                #     else:
-                #         self._trustBeliefs[member] -= 0.3
-
-            clamped_trust: float = max(0.0, min(1.0, round(self._trustBeliefs[member], 2)))
+            clamped_trust: float = max(0.0, min(round(self._trustBeliefs[member], 1), 1.0))
             updated_trust.append(str(clamped_trust))
 
         # Update the agent's csv with the latest values
@@ -624,3 +626,23 @@ class CustomBaselineAgent(BW4TBrain):
         x_a, y_a = a
         x_b, y_b = b
         return abs(x_a - x_b) + abs(y_a - y_b)
+
+    def _door_trust_positive(self, message, member):
+        room_name = message.split()[-1]
+        all_doors = [door for door in self._current_state.values()
+                     if 'class_inheritance' in door and 'Door' in door['class_inheritance']]
+        closed_rooms = [door['room_name'] for door in all_doors if not door['is_open']]
+
+        if room_name in closed_rooms:
+            self._trustBeliefs[member] -= 0.1
+        else:
+            self._trustBeliefs[member] += 0.1
+
+    def _door_trust(self, message, member):
+        room_name = message.split()[-1]
+        all_doors = [door for door in self._current_state.values()
+                     if 'class_inheritance' in door and 'Door' in door['class_inheritance']]
+        closed_rooms = [door['room_name'] for door in all_doors if not door['is_open']]
+
+        if room_name in closed_rooms:
+            self._trustBeliefs[member] -= 0.1
