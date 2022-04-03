@@ -690,7 +690,6 @@ class StrongAgent(CustomBaselineAgent):
                 dist: str = self.__get_distance()
 
                 if dist == "goal":
-                    self._report_to_console("Closer")
                     self._phase = Phase.PLAN_PATH_TO_GOAL
                 else:
                     self._phase = Phase.FOLLOW_PATH_TO_TARGET_ITEMS
@@ -714,8 +713,6 @@ class StrongAgent(CustomBaselineAgent):
         )
 
         temp: int = 0 if len(self._is_carrying) == 1 else 1
-
-        self._report_to_console("Carrying: " + str(self._is_carrying[temp]['obj_id']))
 
         return GrabObject.__name__, {'object_id': self._is_carrying[temp]['obj_id']}
 
