@@ -111,7 +111,7 @@ class CustomBaselineAgent(BW4TBrain):
         self._navigator = Navigator(agent_id=self.agent_id,
                                     action_set=self.action_set, algorithm=Navigator.A_STAR_ALGORITHM)
 
-    def filter_observations(self, state: State) -> State:
+    def filter_on_bw4t_observations(self, state: State) -> State:
         return state
 
     def decide_on_bw4t_action(self, state: State) -> tuple[str, dict]:
