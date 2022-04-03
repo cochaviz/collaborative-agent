@@ -1,5 +1,6 @@
-from __future__ import annotations
-
+import csv
+import os
+from _csv import writer
 from typing import Callable, Dict, Optional
 import enum
 import random
@@ -15,7 +16,7 @@ from matrx.agents.agent_utils.state_tracker import StateTracker
 from matrx.actions.door_actions import OpenDoorAction
 from matrx.messages.message import Message
 
-Action = Optional[tuple[str, dict]]
+Action = tuple[str, dict] | None
 
 class Phase(enum.Enum):
     PLAN_PATH_TO_CLOSED_DOOR = 1
@@ -407,6 +408,9 @@ class CustomBaselineAgent(BW4TBrain):
         if members[0] not in self._trustBeliefs:
             self.__initTrust(members)
 
+        # Keep track of all the updates
+        temp: list = []
+
         for member in members:
             for message in received[member]:
                 if 'Found' in message and '#00000' in message:
@@ -418,11 +422,49 @@ class CustomBaselineAgent(BW4TBrain):
                     closed_rooms = [door['room_name'] for door in all_doors if not door['is_open']]
 
                     if room_name in closed_rooms:
-                        self._trustBeliefs[member] -=0.1
+                        self._trustBeliefs[member] -= 0.1
+
+            temp.append(str(self._trustBeliefs[member]))
+
+        # Append the list to the end of the csv
+        read_path = 'agents1/trust_%s.csv' % str(self._agent_name)
+        with open(read_path, 'a') as read_obj:
+            csv_writer = writer(read_obj)
+            csv_writer.writerow(temp)
 
     def __initTrust(self, members, default=.5):
+        # Open file or create a new one (one for each agent)
+        write_path = 'agents1/trust_%s.csv' % str(self._agent_name)
+        mode = 'r' if os.path.exists(write_path) else 'w'
+
+        # Initialize values for self and for their file
+        self._trustBeliefs = {}
+        headers = []
+        trust = []
+
         for member in members:
+            headers.append(str(member))
             self._trustBeliefs[member] = default
+            trust.append(str(self._trustBeliefs[member]))
+
+        # If file doesn't exist, create and initialize it
+        if mode == 'w':
+            with open(write_path, mode) as t:
+                w = csv.writer(t)
+                w.writerow(headers)
+                w.writerow(trust)
+            t.close()
+
+        # Otherwise, initiate the agent's trust to the last known trust value
+        else:
+            with open(write_path, mode) as t:
+                first_line = t.readlines()[0]
+                final_line = t.readlines()[-1]
+                trust_dict = dict(zip(first_line, final_line))
+                print(str(trust_dict))
+                for member in members:
+                    self._trustBeliefs[member] = float(trust_dict[member])
+            t.close()
 
     # ==== UTILS ====
 
