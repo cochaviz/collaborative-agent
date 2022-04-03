@@ -77,8 +77,3 @@ class ColorblindAgent(CustomBaselineAgent):
 
         return strings
 
-    def _compare_blocks(self, a, b) -> bool:
-        """
-        Compare blocks based on their shape
-        """
-        return a['visualization']['shape'] == b['visualization']['shape']
