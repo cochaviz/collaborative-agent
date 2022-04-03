@@ -2,7 +2,7 @@ from matrx.actions import OpenDoorAction
 
 from agents1.CustomBaselineAgent import CustomBaselineAgent, Action, Phase
 
-import re
+import re, random
 
 
 class ColorblindAgent(CustomBaselineAgent):
@@ -12,6 +12,28 @@ class ColorblindAgent(CustomBaselineAgent):
 
     def __init__(self, settings):
         super().__init__(settings)
+
+    def _planPathToClosedDoorPhase(self) -> Action | None:
+        self._navigator.reset_full()
+        all_doors = [door for door in self._current_state.values()
+                     if 'class_inheritance' in door and 'Door' in door['class_inheritance']]
+        closed_doors = [door for door in all_doors if not door['is_open']]
+
+        # TODO maybe separate state?
+        if len(closed_doors) == 0:
+            self._door = random.choice(all_doors)
+        else:
+            self._door = random.choice(closed_doors)
+
+        door_loc = self._door['location']
+        # Location in front of door is south from door
+        door_loc = door_loc[0], door_loc[1] + 1
+
+        # Send message of current action
+        self._sendMessage('Moving to ' + self._door['room_name'])
+        self._navigator.add_waypoints([door_loc])
+
+        self._phase = Phase.FOLLOW_PATH_TO_CLOSED_DOOR
 
     def _openDoorPhase(self) -> Action | None:
         """

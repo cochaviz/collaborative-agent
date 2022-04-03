@@ -47,6 +47,11 @@ class StrongAgent(CustomBaselineAgent):
 
         assert len(self._target_items) != 0
 
+        if not self._checkTargetItemsIfHint():
+            # Hint wasn't corrent
+            self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
+            return
+
         self._is_carrying.append(self._target_items[0])
         self._target_items.clear()
         self._target_goal_index += 1
@@ -57,6 +62,7 @@ class StrongAgent(CustomBaselineAgent):
         )
 
         temp: int = 0 if len(self._is_carrying) == 1 else 1
+
         self._report_to_console("Carrying: " + str(self._is_carrying[temp]['obj_id']))
 
         return GrabObject.__name__, {'object_id': self._is_carrying[temp]['obj_id']}

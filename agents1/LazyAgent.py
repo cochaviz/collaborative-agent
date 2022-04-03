@@ -21,7 +21,7 @@ class LazyAgent(CustomBaselineAgent):
         if flaky is not None:
             return flaky
 
-        super()._openDoorPhase()
+        return super()._openDoorPhase()
 
     def _followRoomCheckPhase(self) -> Action | None:
         """
@@ -32,7 +32,7 @@ class LazyAgent(CustomBaselineAgent):
             self._collectables.clear()
             return flaky
 
-        super()._followRoomCheckPhase()
+        return super()._followRoomCheckPhase()
 
     def _getItemPhase(self) -> Action | None:
         """
@@ -42,19 +42,19 @@ class LazyAgent(CustomBaselineAgent):
         if flaky is not None:
             return flaky
 
-        super()._getItemPhase()
+        return super()._getItemPhase()
 
     def _followPathToGoalPhase(self) -> Action | None:
         """
         Follows path to the goal 50% of the time.
         """
-        flaky = self._be_flaky()
-        if flaky is not None:
-            self._report_to_console("I'm cancelling this shit...")
-            self._phase = Phase.CANCEL_GOAL
-            return flaky
+        # TODO gets stuck in a loop
+        # flaky = self._be_flaky()
+        # if flaky is not None:
+        #     self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
+        #     return flaky
 
-        super()._followPathToGoalPhase()
+        return super()._followPathToGoalPhase()
 
     def _be_flaky(self) -> Action | None:
         """

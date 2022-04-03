@@ -22,8 +22,8 @@ DEFAULT_WORLDSETTINGS: dict={
     'random_seed': 1,
     'verbose': False,
     'matrx_paused':True,
-    'run_matrx_api':True, # If you want to allow web connection
-    'run_matrx_visualizer':True, # if you want to allow web visualizer
+    'run_matrx_api':False, # If you want to allow web connection
+    'run_matrx_visualizer':False, # if you want to allow web visualizer
 
     'key_action_map': {  # For the human agents
         'w': MoveNorth.__name__,

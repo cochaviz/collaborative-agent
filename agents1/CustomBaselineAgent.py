@@ -1,7 +1,7 @@
 import csv
 import os
 from _csv import writer
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, OrderedDict
 import enum
 import random
 import re
@@ -63,6 +63,8 @@ class CustomBaselineAgent(BW4TBrain):
         self._acting_on_trust: bool = False
         self._trusting_agent: str = ""
         self._trustBeliefs: dict = {}
+
+        self._prev_phase: Phase|None = None
 
         self._memory: dict[Phase, dict] = {
             Phase.PLAN_PATH_TO_CLOSED_DOOR: {},
@@ -135,6 +137,7 @@ class CustomBaselineAgent(BW4TBrain):
 
         while True:
             assert self._phase is not None
+            self._prev_phase = self._phase
             action_and_subject = self._switchPhase[self._phase]()
 
             if action_and_subject is not None and action_and_subject[0] is not None:
@@ -252,21 +255,11 @@ class CustomBaselineAgent(BW4TBrain):
         # TODO: probably doesn't need to be its own phase
         self._phase = Phase.PLAN_PATH_TO_GOAL
 
-        # if target item is only a hint by another agent
-        if not 'obj_id' in self._target_items[0]:
-            close_items = self._current_state.get_objects_in_area(
-                top_left=self._current_state[self.agent_id]['location'], width=1, height=1)
-            close_collectables = self._filter_collectables(close_items)
-
-            # check if the item under you matches the description
-            if len(close_collectables) > 0 and self._compare_blocks(self._target_items[0], close_collectables[0]):
-                self._target_items[0]['obj_id'] = close_collectables[0]['obj_id']
-            else:
-                # if not the case, remove current item as considerable goal collectable match for goal object
-                self._goal_blocks[self._target_items[0]['goal_index']].pop('collectable_match')
-                self._target_items.clear()
-                self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
-                return
+        if not self._checkTargetItemsIfHint():
+            # Hint wasn't corrent
+            # TODO Penalize lying agent
+            self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
+            return
 
         self._is_carrying.append(self._target_items[0])
         self._target_items.clear()
@@ -278,6 +271,29 @@ class CustomBaselineAgent(BW4TBrain):
         )
 
         return GrabObject.__name__, {'object_id': self._is_carrying[0]['obj_id']}
+
+    def _checkTargetItemsIfHint(self):
+        # HACK Why do we need to check for this?
+        # if len(self._target_items) == 0:
+        #     return False
+
+        # if target item is only a hint by another agent
+        if not 'obj_id' in self._target_items[0]:
+            close_items = self._current_state.get_objects_in_area(
+                top_left=self._current_state[self.agent_id]['location'], width=1, height=1)
+            close_collectables = self._filter_collectables(close_items)
+
+            # check if the item under you matches the description
+            if len(close_collectables) > 0 and self._compare_blocks(self._target_items[0], close_collectables[0]):
+                self._target_items[0]['obj_id'] = close_collectables[0]['obj_id']
+            else:
+                # TODO Penalize lying agent
+                # if not the case, remove current item as considerable goal collectable match for goal object
+                self._goal_blocks[self._target_items[0]['goal_index']].pop('collectable_match')
+                self._target_items.clear()
+                return False
+
+        return True
 
     # ==== GOAL PHASE ====
 
@@ -410,7 +426,7 @@ class CustomBaselineAgent(BW4TBrain):
             self.__initTrust(members)
 
         # Keep track of all the updates
-        temp: list[str] = []
+        updated_trust: list[str] = []
 
         for member in members:
             for message in received[member]:
@@ -424,26 +440,30 @@ class CustomBaselineAgent(BW4TBrain):
 
                     if room_name in closed_rooms:
                         self._trustBeliefs[member] -= 0.1
-                if 'Dropped' in message:
-                    item = self.__object_from_message(message)
-                    count: int = 0
-                    for location in self._target_items:
-                        self._report_to_console("Location: " + str(location['location']))
-                        self._report_to_console("Said loc: " + str(item['location']))
-                        if item['location'] == location['location']:
-                            count += 1
-                    if count == 1:
-                        self._trustBeliefs[member] += 0.2
                     else:
-                        self._trustBeliefs[member] -= 0.3
+                        self._trustBeliefs[member] += 0.1
 
-            temp.append(round(self._trustBeliefs[member], 2))
+                # if 'Dropped' in message:
+                #     item = self.__object_from_message(message)
+                #     count: int = 0
+                #     for location in self._target_items:
+                #         self._report_to_console("Location: " + str(location['location']))
+                #         self._report_to_console("Said loc: " + str(item['location']))
+                #         if item['location'] == location['location']:
+                #             count += 1
+                #     if count == 1:
+                #         self._trustBeliefs[member] += 0.2
+                #     else:
+                #         self._trustBeliefs[member] -= 0.3
+
+            clamped_trust: float = max(0.0, min(1.0, round(self._trustBeliefs[member], 2)))
+            updated_trust.append(str(clamped_trust))
 
         # Update the agent's csv with the latest values
         read_path = 'agents1/trust_%s.csv' % str(self._agent_name)
         with open(read_path, 'a') as read_obj:
             csv_writer = writer(read_obj)
-            csv_writer.writerow(temp)
+            csv_writer.writerow(updated_trust)
 
     def __initTrust(self, members, default=.5):
         # Open file or create a new one (one for each agent)
@@ -462,24 +482,20 @@ class CustomBaselineAgent(BW4TBrain):
 
         # If file doesn't exist, create and initialize it
         if mode == 'w':
-            with open(write_path, mode) as t:
-                w = csv.writer(t)
+            with open(write_path, mode) as file:
+                w = csv.writer(file)
                 w.writerow(headers)
                 w.writerow(trust)
-            t.close()
 
         # Otherwise, initiate the agent's trust to the last known trust value
         else:
-            with open(write_path, mode) as t:
-                final_line = t.readlines()[-1].strip().split(',')
-                t.seek(0)
-                first_line = t.readlines()[0].strip().split(',')
-                trust_dict = dict(zip(first_line, final_line))
-                print(str(trust_dict))
-                for member in members:
-                    self._trustBeliefs[member] = float(trust_dict[member])
+            with open(write_path, mode) as file:
+                trust: list[dict[str, str]] = list(csv.DictReader(file))
 
-            t.close()
+                for member in members:
+                    self._trustBeliefs[member] = float(trust[-1][member])
+
+        print(self._trustBeliefs)
 
     # ==== UTILS ====
 

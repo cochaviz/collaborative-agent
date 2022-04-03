@@ -14,20 +14,23 @@ press the start button in god mode to start the session.
 """
 
 if __name__ == "__main__":
-    count: int = 10
+    runs: int = 10
 
     agents = [
-        {'name': 'agent1', 'botclass': StrongAgent, 'settings': {}},
+        {'name': 'strong', 'botclass': StrongAgent, 'settings': {}},
         # {'name': 'agent3', 'botclass': CustomBaselineAgent, 'settings': {}},
-        {'name': 'agent2', 'botclass': ColorblindAgent, 'settings': {}},
-        {'name': 'agent4', 'botclass': LiarAgent, 'settings': {}},
-        {'name': 'agent5', 'botclass': LazyAgent, 'settings': {}},
+        {'name': 'colorblind', 'botclass': ColorblindAgent, 'settings': {}},
+        {'name': 'liar', 'botclass': LiarAgent, 'settings': {}},
+        {'name': 'lazy', 'botclass': LazyAgent, 'settings': {}},
         {'name': 'human', 'botclass': Human, 'settings': {}}
         ]
 
-    while count > 0:
-        print("Started world...")
+    print("Starting", runs, "runs...")
+
+    for i in range(runs):
+        print("Started world", i ,"...")
         world=BW4TWorld(agents).run()
-        print("DONE!")
+        print("Done, running next...")
         print(Statistics(world.getLogger().getFileName()))
-        count -= 1
+
+    print("Finished runs")
