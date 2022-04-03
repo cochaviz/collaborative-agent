@@ -16,7 +16,7 @@ from matrx.agents.agent_utils.state_tracker import StateTracker
 from matrx.actions.door_actions import OpenDoorAction
 from matrx.messages.message import Message
 
-Action = tuple[str, dict] | None
+Action = tuple[str, dict]
 
 
 class Phase(enum.Enum):
@@ -471,8 +471,9 @@ class CustomBaselineAgent(BW4TBrain):
         # Otherwise, initiate the agent's trust to the last known trust value
         else:
             with open(write_path, mode) as t:
-                first_line = t.readlines()[0]
-                final_line = t.readlines()[-1]
+                final_line = t.readlines()[-1].strip().split(',')
+                t.seek(0)
+                first_line = t.readlines()[0].strip().split(',')
                 trust_dict = dict(zip(first_line, final_line))
                 print(str(trust_dict))
                 for member in members:
