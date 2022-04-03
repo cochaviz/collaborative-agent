@@ -6,6 +6,7 @@ from agents1.ColorblindAgent import ColorblindAgent
 from bw4t.BW4TWorld import BW4TWorld
 from bw4t.statistics import Statistics
 from agents1.BW4THuman import Human
+from agents1.utils import plot
 
 
 """
@@ -14,7 +15,7 @@ press the start button in god mode to start the session.
 """
 
 if __name__ == "__main__":
-    runs: int = 10
+    runs: int = 1
 
     agents = [
         {'name': 'strong', 'botclass': StrongAgent, 'settings': {}},
@@ -34,3 +35,4 @@ if __name__ == "__main__":
         print(Statistics(world.getLogger().getFileName()))
 
     print("Finished runs")
+    plot("strong")

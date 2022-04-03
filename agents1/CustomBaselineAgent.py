@@ -1,7 +1,7 @@
 import csv
 import os
 from _csv import writer
-from typing import Callable, Dict, OrderedDict, Optional
+from typing import Callable, Dict
 import enum
 import random
 import re
@@ -61,7 +61,7 @@ class CustomBaselineAgent(BW4TBrain):
 
         # is true when acting on second-hand information
         self._acting_on_trust: bool = False
-        self._trusting_agent: str = ""
+        self._trusting_agent: dict[str, bool] = {}
         self._trustBeliefs: dict = {}
 
         self._prev_phase: Phase|None = None
@@ -133,7 +133,7 @@ class CustomBaselineAgent(BW4TBrain):
 
         # Update trust beliefs for team members
         self._updateTrustBelief(self._teamMembers, received_messages)
-        self._memorize(self._teamMembers, received_messages)
+        self._act_on_trust(self._teamMembers, received_messages)
 
         while True:
             assert self._phase is not None
@@ -390,40 +390,41 @@ class CustomBaselineAgent(BW4TBrain):
 
     # ==== TRUST ====
 
-    def _memorize(self, member, received) -> Action | None:
+    def _act_on_trust(self, member, received) -> Action | None:
         for member in received.keys():
             # Ignore messages from agents we don't trust
-            if self._trustBeliefs[member] < 0.3:
-                print("Dont trust: " + str(member))
-                break
-            for message in received[member]:
-                if True or member != self.agent_id:
-                    # TODO if picking up object, remove from considered collectable goals
-                    if 'Found' in message:
-                        item = self.__object_from_message(message)
-                        self.__check_item_and_add_if_goal(item)
+            if self._trustBeliefs[member] <= 0.2 and self._trusting_agent[member]:
+                self._sendMessage("I don't trust " + member)
+                self._trusting_agent[member] = False
+            else:
+                for message in received[member]:
+                    if member != self.agent_id and self._trusting_agent[member]:
+                        # TODO if picking up object, remove from considered collectable goals
+                        if 'Found' in message:
+                            item = self.__object_from_message(message)
+                            self.__check_item_and_add_if_goal(item)
 
-                    if 'Dropped' in message:
-                        item = self.__object_from_message(message)
-                        self.__check_item_and_add_if_goal(item)
-                        item_goal_index = self.__get_matching_goal_index(item)
+                        if 'Dropped' in message:
+                            item = self.__object_from_message(message)
+                            self.__check_item_and_add_if_goal(item)
+                            item_goal_index = self.__get_matching_goal_index(item)
 
-                        current_goal_block = self._goal_blocks[item_goal_index]
-                        # If the item matches the current goal and the drop location matches the target location
-                        if self._compare_blocks(item, current_goal_block) and item['location'] == current_goal_block[
-                            'location']:
-                            # set next goal as target, capping at the last
-                            next_goal_index = self._target_goal_index + 1
+                            current_goal_block = self._goal_blocks[item_goal_index]
+                            # If the item matches the current goal and the drop location matches the target location
+                            if self._compare_blocks(item, current_goal_block) and item['location'] == current_goal_block[
+                                'location']:
+                                # set next goal as target, capping at the last
+                                next_goal_index = self._target_goal_index + 1
 
-                            if not next_goal_index > 2:
-                                self._target_goal_index = next_goal_index
-                                # and look for collectable goal item
-                                if self._checkForPossibleGoal():
-                                    # drop everything we're doing now if it knows one exists
-                                    return self._dropBlockIfCarrying()
-                            else:
-                                # TODO liar liar
-                                pass
+                                if not next_goal_index > 2:
+                                    self._target_goal_index = next_goal_index
+                                    # and look for collectable goal item
+                                    if self._checkForPossibleGoal():
+                                        # drop everything we're doing now if it knows one exists
+                                        return self._dropBlockIfCarrying()
+                                else:
+                                    # TODO liar liar
+                                    pass
 
     def _updateTrustBelief(self, members, received) -> None:
         if members[0] not in self._trustBeliefs:
@@ -457,6 +458,12 @@ class CustomBaselineAgent(BW4TBrain):
                         self._trustBeliefs[member] -= 0.1
                     else:
                         self._trustBeliefs[member] += 0.1
+                if 'trust' in message:
+                    target_agent:str = message.split()[-1].strip()
+
+                    if self._trustBeliefs[member] > 0.5:
+                        if not self._agent_name == target_agent:
+                            self._trustBeliefs[target_agent] -= .1
 
             clamped_trust: float = max(0.0, min(round(self._trustBeliefs[member], 1), 1.0))
             updated_trust.append(str(clamped_trust))
@@ -481,6 +488,7 @@ class CustomBaselineAgent(BW4TBrain):
             headers.append(str(member))
             self._trustBeliefs[member] = default
             trust.append(self._trustBeliefs[member])
+            self._trusting_agent[member] = True
 
         # If file doesn't exist, create and initialize it
         if mode == 'w':
@@ -496,6 +504,9 @@ class CustomBaselineAgent(BW4TBrain):
 
                 for member in members:
                     self._trustBeliefs[member] = float(trust[-1][member])
+
+                    if self._trustBeliefs[member] <= .2:
+                        self._trusting_agent[member] = False
 
         print(self._trustBeliefs)
 
