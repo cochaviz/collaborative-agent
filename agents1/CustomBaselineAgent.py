@@ -18,6 +18,7 @@ from matrx.messages.message import Message
 
 Action = tuple[str, dict] | None
 
+
 class Phase(enum.Enum):
     PLAN_PATH_TO_CLOSED_DOOR = 1
     FOLLOW_PATH_TO_CLOSED_DOOR = 2
@@ -144,7 +145,7 @@ class CustomBaselineAgent(BW4TBrain):
     def _planPathToClosedDoorPhase(self) -> Action | None:
         self._navigator.reset_full()
         all_doors = [door for door in self._current_state.values()
-                                if 'class_inheritance' in door and 'Door' in door['class_inheritance']]
+                     if 'class_inheritance' in door and 'Door' in door['class_inheritance']]
         closed_doors = [door for door in all_doors if not door['is_open']]
 
         # TODO maybe separate state?
@@ -253,7 +254,8 @@ class CustomBaselineAgent(BW4TBrain):
 
         # if target item is only a hint by another agent
         if not 'obj_id' in self._target_items[0]:
-            close_items = self._current_state.get_objects_in_area(top_left=self._current_state[self.agent_id]['location'], width=1, height=1)
+            close_items = self._current_state.get_objects_in_area(
+                top_left=self._current_state[self.agent_id]['location'], width=1, height=1)
             close_collectables = self._filter_collectables(close_items)
 
             # check if the item under you matches the description
@@ -323,9 +325,9 @@ class CustomBaselineAgent(BW4TBrain):
 
         return self._target_goal_index == 0 or len(self._filter_collectables(objects)) > 0
 
-    def _dropBlockIfCarrying(self, check_for_goal:bool=True) -> Action | None:
-        if len(self._is_carrying) == 0 :
-           return None
+    def _dropBlockIfCarrying(self, check_for_goal: bool = True) -> Action | None:
+        if len(self._is_carrying) == 0:
+            return None
 
         block: dict = self._is_carrying.pop()
         current_location: tuple = self._current_state[self.agent_id]['location']
@@ -338,8 +340,7 @@ class CustomBaselineAgent(BW4TBrain):
 
         return DropObject.__name__, {'object_id': block['obj_id']}
 
-
-    def _checkForPossibleGoal(self, set_target_and_phase:bool=True) -> bool:
+    def _checkForPossibleGoal(self, set_target_and_phase: bool = True) -> bool:
         match = self._check_for_current_target_goal()
 
         if match is not None and set_target_and_phase:
@@ -389,7 +390,8 @@ class CustomBaselineAgent(BW4TBrain):
 
                         current_goal_block = self._goal_blocks[item_goal_index]
                         # If the item matches the current goal and the drop location matches the target location
-                        if self._compare_blocks(item, current_goal_block) and item['location'] == current_goal_block['location']:
+                        if self._compare_blocks(item, current_goal_block) and item['location'] == current_goal_block[
+                            'location']:
                             # set next goal as target, capping at the last
                             next_goal_index = self._target_goal_index + 1
 
@@ -403,13 +405,12 @@ class CustomBaselineAgent(BW4TBrain):
                                 # TODO liar liar
                                 pass
 
-
     def _updateTrustBelief(self, members, received) -> None:
         if members[0] not in self._trustBeliefs:
             self.__initTrust(members)
 
         # Keep track of all the updates
-        temp: list = []
+        temp: list[str] = []
 
         for member in members:
             for message in received[member]:
@@ -417,16 +418,28 @@ class CustomBaselineAgent(BW4TBrain):
                     self._trustBeliefs[member] -= 0.1
                 if 'Opening' in message:
                     room_name = message.split()[-1]
-                    all_doors = [ door for door in self._current_state.values()
-                                            if 'class_inheritance' in door and 'Door' in door['class_inheritance']]
+                    all_doors = [door for door in self._current_state.values()
+                                 if 'class_inheritance' in door and 'Door' in door['class_inheritance']]
                     closed_rooms = [door['room_name'] for door in all_doors if not door['is_open']]
 
                     if room_name in closed_rooms:
                         self._trustBeliefs[member] -= 0.1
+                if 'Dropped' in message:
+                    item = self.__object_from_message(message)
+                    count: int = 0
+                    for location in self._target_items:
+                        self._report_to_console("Location: " + str(location['location']))
+                        self._report_to_console("Said loc: " + str(item['location']))
+                        if item['location'] == location['location']:
+                            count += 1
+                    if count == 1:
+                        self._trustBeliefs[member] += 0.2
+                    else:
+                        self._trustBeliefs[member] -= 0.3
 
-            temp.append(str(self._trustBeliefs[member]))
+            temp.append(round(self._trustBeliefs[member], 2))
 
-        # Append the list to the end of the csv
+        # Update the agent's csv with the latest values
         read_path = 'agents1/trust_%s.csv' % str(self._agent_name)
         with open(read_path, 'a') as read_obj:
             csv_writer = writer(read_obj)
@@ -445,7 +458,7 @@ class CustomBaselineAgent(BW4TBrain):
         for member in members:
             headers.append(str(member))
             self._trustBeliefs[member] = default
-            trust.append(str(self._trustBeliefs[member]))
+            trust.append(self._trustBeliefs[member])
 
         # If file doesn't exist, create and initialize it
         if mode == 'w':
@@ -464,6 +477,7 @@ class CustomBaselineAgent(BW4TBrain):
                 print(str(trust_dict))
                 for member in members:
                     self._trustBeliefs[member] = float(trust_dict[member])
+
             t.close()
 
     # ==== UTILS ====
@@ -572,16 +586,16 @@ class CustomBaselineAgent(BW4TBrain):
             "visualization": {
                 "colour": colour,
                 "shape": shape
-                },
-            }
+            },
+        }
 
-    def __check_item_and_add_if_goal(self, item:dict):
+    def __check_item_and_add_if_goal(self, item: dict):
         old_collectables = self._collectables
         self._collectables = [item]
         self._check_collectables()
         self._collectables = old_collectables
 
-    def __return_closest_to(self, a:dict, b:dict, location:tuple) -> dict:
+    def __return_closest_to(self, a: dict, b: dict, location: tuple) -> dict:
         if self.__distance(a['location'], location) < self.__distance(b['location'], location):
             return a
         return b
@@ -589,7 +603,7 @@ class CustomBaselineAgent(BW4TBrain):
     def _filter_collectables(self, objects):
         return list(filter(lambda e: 'CollectableBlock' in e['class_inheritance'], objects))
 
-    def __distance(self, a:tuple, b:tuple) -> int:
+    def __distance(self, a: tuple, b: tuple) -> int:
         x_a, y_a = a
         x_b, y_b = b
         return abs(x_a - x_b) + abs(y_a - y_b)

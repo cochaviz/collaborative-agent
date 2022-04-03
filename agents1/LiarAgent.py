@@ -94,7 +94,7 @@ class LiarAgent(CustomBaselineAgent):
         else:
             return msg
 
-    def __replace_location(self, msg:str) -> str:
+    def __replace_location(self, msg: str) -> str:
         """
         Check if the message contains a location
         """
